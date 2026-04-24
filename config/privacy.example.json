@@ -1,0 +1,22 @@
+{
+  "blocked_apps": [
+    "1Password",
+    "Keychain Access",
+    "System Settings",
+    "System Preferences"
+  ],
+  "blocked_domains": [
+    "bank",
+    "chase.com",
+    "wellsfargo.com",
+    "capitalone.com",
+    "paypal.com",
+    "venmo.com"
+  ],
+  "excluded_path_fragments": [
+    "/Library/",
+    "/.ssh/",
+    "/.gnupg/",
+    "/.Trash/"
+  ]
+}

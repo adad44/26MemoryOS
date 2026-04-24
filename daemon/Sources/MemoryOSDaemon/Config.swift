@@ -8,6 +8,8 @@ struct MemoryOSConfig {
     let allowedFileExtensions: Set<String>
     let blockedApps: Set<String>
     let ignoredHostFragments: [String]
+    let excludedPathFragments: [String]
+    let pauseFlagPath: String
 
     static func load() -> MemoryOSConfig {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -16,6 +18,19 @@ struct MemoryOSConfig {
             atPath: dataDir,
             withIntermediateDirectories: true
         )
+
+        let privacy = PrivacyConfig.load(from: "\(dataDir)/privacy.json")
+
+        let defaultBlockedApps: Set<String> = [
+            "1Password", "Keychain Access", "System Settings", "System Preferences"
+        ]
+        let defaultIgnoredHosts = [
+            "bank", "chase.com", "wellsfargo.com", "capitalone.com",
+            "paypal.com", "venmo.com"
+        ]
+        let defaultExcludedPaths = [
+            "/Library/", "/.ssh/", "/.gnupg/", "/.Trash/"
+        ]
 
         return MemoryOSConfig(
             databasePath: ProcessInfo.processInfo.environment["MEMORYOS_DB"]
@@ -31,13 +46,29 @@ struct MemoryOSConfig {
                 "pdf", "md", "txt", "py", "js", "ts", "tsx", "jsx", "swift",
                 "json", "yaml", "yml", "html", "css", "csv"
             ],
-            blockedApps: [
-                "1Password", "Keychain Access", "System Settings", "System Preferences"
-            ],
-            ignoredHostFragments: [
-                "bank", "chase.com", "wellsfargo.com", "capitalone.com",
-                "paypal.com", "venmo.com"
-            ]
+            blockedApps: defaultBlockedApps.union(privacy?.blockedApps ?? []),
+            ignoredHostFragments: defaultIgnoredHosts + (privacy?.blockedDomains ?? []),
+            excludedPathFragments: defaultExcludedPaths + (privacy?.excludedPathFragments ?? []),
+            pauseFlagPath: "\(dataDir)/capture.paused"
         )
+    }
+}
+
+private struct PrivacyConfig: Decodable {
+    let blockedApps: [String]
+    let blockedDomains: [String]
+    let excludedPathFragments: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case blockedApps = "blocked_apps"
+        case blockedDomains = "blocked_domains"
+        case excludedPathFragments = "excluded_path_fragments"
+    }
+
+    static func load(from path: String) -> PrivacyConfig? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(PrivacyConfig.self, from: data)
     }
 }

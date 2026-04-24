@@ -59,6 +59,9 @@ final class FileCaptureWatcher {
     }
 
     private func handleChangedPath(_ path: String) {
+        guard !FileManager.default.fileExists(atPath: config.pauseFlagPath) else {
+            return
+        }
         let url = URL(fileURLWithPath: path)
         guard shouldCapture(url) else { return }
 
@@ -83,6 +86,9 @@ final class FileCaptureWatcher {
     private func shouldCapture(_ url: URL) -> Bool {
         let filename = url.lastPathComponent
         guard !filename.hasPrefix(".") else { return false }
+        guard !config.excludedPathFragments.contains(where: { url.path.contains($0) }) else {
+            return false
+        }
 
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),

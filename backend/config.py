@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class BackendSettings:
+    host: str
+    port: int
+    api_key: Optional[str]
+    cors_origins: tuple[str, ...]
+
+    @property
+    def api_key_enabled(self) -> bool:
+        return bool(self.api_key)
+
+
+def load_settings() -> BackendSettings:
+    origins = os.environ.get(
+        "MEMORYOS_CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    )
+    return BackendSettings(
+        host=os.environ.get("MEMORYOS_HOST", "127.0.0.1"),
+        port=int(os.environ.get("MEMORYOS_PORT", "8765")),
+        api_key=os.environ.get("MEMORYOS_API_KEY"),
+        cors_origins=tuple(origin.strip() for origin in origins.split(",") if origin.strip()),
+    )

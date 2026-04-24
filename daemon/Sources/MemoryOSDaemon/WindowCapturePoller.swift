@@ -27,6 +27,9 @@ final class WindowCapturePoller {
     }
 
     private func poll() {
+        guard !FileManager.default.fileExists(atPath: config.pauseFlagPath) else {
+            return
+        }
         guard extractor.isTrusted else {
             fputs("MemoryOS is waiting for Accessibility permission.\n", stderr)
             return

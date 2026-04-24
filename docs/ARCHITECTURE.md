@@ -17,6 +17,8 @@ The daemon is responsible for passive capture:
 
 The daemon writes directly to SQLite.
 
+The daemon also honors `~/Library/Application Support/MemoryOS/capture.paused`, which lets the menu bar app pause local capture without stopping the process.
+
 ### Browser extension
 
 Location: `extension/`
@@ -62,23 +64,27 @@ Planned Phase 2 responsibilities:
 
 Location: `backend/`
 
-Planned Phase 3 responsibilities:
+Phase 3 responsibilities:
 
 - Serve semantic search through FastAPI.
 - Load the embedding model and FAISS index.
 - Fetch metadata from SQLite.
 - Expose `/search`, `/stats`, and `/recent`.
+- Refresh the index through `/refresh-index`.
+- Accept browser capture ingest through `/capture/browser`.
 
 ### Web UI
 
 Location: `web/`
 
-Planned Phase 4 responsibilities:
+Phase 4 responsibilities:
 
 - Search interface.
 - Result cards and filters.
 - Stats dashboard.
 - Click logging for re-ranker labels.
+- Manual keep/noise labeling.
+- Backend settings and index refresh.
 
 ## Data Flow
 
@@ -117,6 +123,7 @@ flowchart LR
   api --> web
   menu --> web
   menu --> sqlite
+  menu -. "pause flag" .-> ax
 ```
 
 ## Privacy Boundaries
@@ -125,6 +132,8 @@ flowchart LR
 - Captures are stored locally by default.
 - Sensitive apps and domains are blocked early.
 - The future menu bar app should expose pause/resume and forget controls.
+- Privacy settings are stored locally in `~/Library/Application Support/MemoryOS/privacy.json`.
+- Export and forget/delete controls are served by the local backend.
 
 ## Build Assumptions
 
@@ -132,3 +141,10 @@ flowchart LR
 - Swift compiler for the daemon.
 - Python 3.11+ for scripts and future ML work.
 - Node 18+ for future web work.
+
+## Packaging
+
+- `scripts/build_daemon.sh` builds the Swift daemon.
+- `scripts/build_menubar.sh` builds `menubar/dist/MemoryOS.app`.
+- `scripts/install_daemon_launch_agent.sh` installs daemon launch at login.
+- `scripts/install_menubar_launch_agent.sh` installs menu bar launch at login.

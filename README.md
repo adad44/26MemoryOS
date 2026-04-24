@@ -11,10 +11,10 @@ Current status: Phase 0 is complete and Phase 1 has a working baseline scaffold.
 | 0 | Setup & Architecture | Complete |
 | 1 | Data Capture Layer | Baseline implemented |
 | 2 | ML Pipeline | Code complete; needs captured/labeled data |
-| 3 | Search Backend | Not started |
-| 4 | Web Interface | Not started |
-| 5 | Mac Menu Bar App | Not started |
-| 6 | Polish & Deploy | Not started |
+| 3 | Search Backend | Complete |
+| 4 | Web Interface | Complete |
+| 5 | Mac Menu Bar App | Complete |
+| 6 | Polish & Deploy | Complete |
 
 ## Project Structure
 
@@ -57,6 +57,72 @@ Then load `extension/` as an unpacked Chrome extension.
 
 More detail is in [docs/PHASE1.md](docs/PHASE1.md).
 
+## Backend Quick Start
+
+Run the local FastAPI backend:
+
+```sh
+scripts/run_backend.sh
+```
+
+Build an index from captured data:
+
+```sh
+curl -X POST http://127.0.0.1:8765/refresh-index \
+  -H "Content-Type: application/json" \
+  -d '{"backend":"tfidf"}'
+```
+
+Search:
+
+```sh
+curl -X POST http://127.0.0.1:8765/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"python traceback embedding search","top_k":10}'
+```
+
+## Web UI Quick Start
+
+```sh
+cd web
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+## Menu Bar Quick Start
+
+```sh
+scripts/build_menubar.sh
+open menubar/dist/MemoryOS.app
+```
+
+Install login startup:
+
+```sh
+scripts/install_daemon_launch_agent.sh
+scripts/install_menubar_launch_agent.sh
+```
+
+## Polish and Privacy
+
+Benchmark backend latency:
+
+```sh
+scripts/benchmark_backend.py --captures 500 --runs 20
+```
+
+Export local data:
+
+```sh
+scripts/export_memoryos.sh
+```
+
 ## Local Data
 
 The default SQLite database location is:
@@ -77,4 +143,10 @@ MEMORYOS_DB=/tmp/memoryos.db daemon/.build/memoryos-daemon
 - [SQLite schema](docs/schema.sql)
 - [Phase 1 notes](docs/PHASE1.md)
 - [Phase 2 notes](docs/PHASE2.md)
+- [Phase 3 notes](docs/PHASE3.md)
+- [Phase 4 notes](docs/PHASE4.md)
+- [Phase 5 notes](docs/PHASE5.md)
+- [Phase 6 notes](docs/PHASE6.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Demo script](docs/DEMO_SCRIPT.md)
 - [Roadmap source](MemoryOS_Roadmap-2.md)

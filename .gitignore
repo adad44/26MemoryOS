@@ -23,6 +23,7 @@ build/
 .env.*
 
 # MemoryOS local runtime data
+.logs/
 *.db
 *.db-shm
 *.db-wal

@@ -1,0 +1,772 @@
+import {
+  Activity,
+  BarChart3,
+  Check,
+  Circle,
+  Database,
+  ExternalLink,
+  FileText,
+  Filter,
+  HardDrive,
+  Loader2,
+  RefreshCw,
+  Search,
+  Settings,
+  Shield,
+  Tag,
+  X,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api, CaptureResult, ClientConfig, PrivacySettings, StatsResponse } from './api';
+
+type Tab = 'search' | 'recent' | 'label' | 'stats' | 'settings';
+
+const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8765';
+
+const tabs: Array<{ id: Tab; label: string; icon: typeof Search }> = [
+  { id: 'search', label: 'Search', icon: Search },
+  { id: 'recent', label: 'Recent', icon: FileText },
+  { id: 'label', label: 'Label', icon: Tag },
+  { id: 'stats', label: 'Stats', icon: BarChart3 },
+  { id: 'settings', label: 'Settings', icon: Settings },
+];
+
+function loadConfig(): ClientConfig {
+  return {
+    baseUrl: localStorage.getItem('memoryos.baseUrl') || DEFAULT_BASE_URL,
+    apiKey: localStorage.getItem('memoryos.apiKey') || '',
+  };
+}
+
+function saveConfig(config: ClientConfig) {
+  localStorage.setItem('memoryos.baseUrl', config.baseUrl);
+  localStorage.setItem('memoryos.apiKey', config.apiKey);
+}
+
+function formatTime(value: string | null) {
+  if (!value) return 'None';
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function sourceLabel(capture: CaptureResult) {
+  return [capture.app_name, capture.source_type, formatTime(capture.timestamp)].join(' / ');
+}
+
+function openCapture(capture: CaptureResult) {
+  if (capture.url) {
+    window.open(capture.url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (capture.file_path) {
+    window.open(`file://${capture.file_path}`, '_blank', 'noopener,noreferrer');
+  }
+}
+
+function labelText(value: number | null) {
+  if (value === 0) return 'Keep';
+  if (value === 1) return 'Noise';
+  return 'Unlabeled';
+}
+
+export function App() {
+  const [config, setConfig] = useState<ClientConfig>(loadConfig);
+  const [tab, setTab] = useState<Tab>('search');
+  const [health, setHealth] = useState<'online' | 'offline' | 'checking'>('checking');
+  const [healthKey, setHealthKey] = useState(false);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState('');
+
+  const checkHealth = async () => {
+    setHealth('checking');
+    try {
+      const response = await api.health(config);
+      setHealth(response.ok ? 'online' : 'offline');
+      setHealthKey(response.api_key_enabled);
+    } catch {
+      setHealth('offline');
+      setHealthKey(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      setStats(await api.stats(config));
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  useEffect(() => {
+    saveConfig(config);
+  }, [config]);
+
+  useEffect(() => {
+    void checkHealth();
+    void loadStats();
+  }, [config.baseUrl, config.apiKey]);
+
+  const statusClass =
+    health === 'online' ? 'text-moss' : health === 'offline' ? 'text-rust' : 'text-signal';
+
+  return (
+    <main className="min-h-screen bg-[#f2f4f6] text-ink">
+      <header className="border-b border-line bg-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-ink text-white">
+              <Database size={20} />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-normal">MemoryOS</h1>
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <Circle size={9} className={statusClass} fill="currentColor" />
+                <span>{health}</span>
+                {healthKey && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">key</span>}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="icon-button" onClick={checkHealth} title="Refresh backend status" type="button">
+              <RefreshCw size={17} />
+            </button>
+            <button className="command-button" onClick={() => setTab('settings')} type="button">
+              <Settings size={16} />
+              Settings
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[220px_1fr]">
+        <nav className="h-fit border-b border-line bg-white p-2 lg:sticky lg:top-4 lg:border">
+          <div className="grid grid-cols-5 gap-1 lg:grid-cols-1">
+            {tabs.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  className={`nav-tab ${tab === item.id ? 'nav-tab-active' : ''}`}
+                  onClick={() => setTab(item.id)}
+                  type="button"
+                >
+                  <Icon size={17} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <section className="min-w-0">
+          {error && (
+            <div className="mb-4 flex items-center justify-between border border-rust/30 bg-[#fff7f3] px-3 py-2 text-sm text-rust">
+              <span>{error}</span>
+              <button className="icon-button-small" onClick={() => setError('')} title="Dismiss" type="button">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+          {toast && (
+            <div className="mb-4 flex items-center justify-between border border-moss/30 bg-[#f2fbf7] px-3 py-2 text-sm text-moss">
+              <span>{toast}</span>
+              <button className="icon-button-small" onClick={() => setToast('')} title="Dismiss" type="button">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {tab === 'search' && <SearchView config={config} onError={setError} />}
+          {tab === 'recent' && <RecentView config={config} onError={setError} />}
+          {tab === 'label' && <LabelView config={config} onError={setError} onToast={setToast} />}
+          {tab === 'stats' && (
+            <StatsView config={config} stats={stats} onStats={setStats} onError={setError} onToast={setToast} />
+          )}
+          {tab === 'settings' && (
+            <SettingsView
+              config={config}
+              onConfig={setConfig}
+              onHealth={checkHealth}
+              apiKeyEnabled={healthKey}
+              onError={setError}
+              onToast={setToast}
+            />
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function SearchView({ config, onError }: { config: ClientConfig; onError: (value: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CaptureResult[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      return;
+    }
+    const handle = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const response = await api.search(config, trimmed, 10);
+        setResults(response.results);
+        onError('');
+      } catch (err) {
+        onError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [query, config.baseUrl, config.apiKey]);
+
+  return (
+    <div className="space-y-4">
+      <div className="toolbar">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+          <input
+            className="search-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search your memory..."
+          />
+        </div>
+        {loading && <Loader2 className="animate-spin text-signal" size={20} />}
+      </div>
+      <ResultList config={config} query={query} results={results} onError={onError} />
+    </div>
+  );
+}
+
+function RecentView({ config, onError }: { config: ClientConfig; onError: (value: string) => void }) {
+  const [results, setResults] = useState<CaptureResult[]>([]);
+  const [appName, setAppName] = useState('');
+  const [sourceType, setSourceType] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const response = await api.recent(config, 75, appName, sourceType);
+      setResults(response.results);
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [config.baseUrl, config.apiKey]);
+
+  return (
+    <div className="space-y-4">
+      <div className="toolbar">
+        <Filter size={18} className="text-slate-500" />
+        <input className="compact-input" value={appName} onChange={(e) => setAppName(e.target.value)} placeholder="App" />
+        <select className="compact-input" value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
+          <option value="">All sources</option>
+          <option value="accessibility">Accessibility</option>
+          <option value="browser">Browser</option>
+          <option value="file">File</option>
+          <option value="screenshot">Screenshot</option>
+        </select>
+        <button className="command-button" onClick={load} type="button">
+          {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+          Refresh
+        </button>
+      </div>
+      <ResultList config={config} query="" results={results} onError={onError} />
+    </div>
+  );
+}
+
+function LabelView({
+  config,
+  onError,
+  onToast,
+}: {
+  config: ClientConfig;
+  onError: (value: string) => void;
+  onToast: (value: string) => void;
+}) {
+  const [results, setResults] = useState<CaptureResult[]>([]);
+  const [filter, setFilter] = useState<'all' | 'unlabeled'>('unlabeled');
+
+  const load = async () => {
+    try {
+      const response = await api.recent(config, 100);
+      setResults(filter === 'unlabeled' ? response.results.filter((item) => item.is_noise === null) : response.results);
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const label = async (capture: CaptureResult, value: number | null) => {
+    try {
+      await api.labelNoise(config, capture.id, value);
+      setResults((items) => items.map((item) => (item.id === capture.id ? { ...item, is_noise: value } : item)));
+      onToast(`Capture ${capture.id}: ${labelText(value)}`);
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [filter, config.baseUrl, config.apiKey]);
+
+  return (
+    <div className="space-y-4">
+      <div className="toolbar">
+        <select className="compact-input" value={filter} onChange={(e) => setFilter(e.target.value as 'all' | 'unlabeled')}>
+          <option value="unlabeled">Unlabeled</option>
+          <option value="all">All captures</option>
+        </select>
+        <button className="command-button" onClick={load} type="button">
+          <RefreshCw size={16} />
+          Refresh
+        </button>
+      </div>
+      <div className="space-y-3">
+        {results.map((capture) => (
+          <CaptureCard key={capture.id} capture={capture}>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="label-button keep" onClick={() => label(capture, 0)} type="button">
+                <Check size={16} />
+                Keep
+              </button>
+              <button className="label-button noise" onClick={() => label(capture, 1)} type="button">
+                <X size={16} />
+                Noise
+              </button>
+              <button className="label-button clear" onClick={() => label(capture, null)} type="button">
+                <Circle size={15} />
+                Clear
+              </button>
+            </div>
+          </CaptureCard>
+        ))}
+        {!results.length && <EmptyState label="No captures" />}
+      </div>
+    </div>
+  );
+}
+
+function StatsView({
+  config,
+  stats,
+  onStats,
+  onError,
+  onToast,
+}: {
+  config: ClientConfig;
+  stats: StatsResponse | null;
+  onStats: (value: StatsResponse) => void;
+  onError: (value: string) => void;
+  onToast: (value: string) => void;
+}) {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadStats = async () => {
+    try {
+      onStats(await api.stats(config));
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const refreshIndex = async () => {
+    setRefreshing(true);
+    try {
+      const response = await api.refreshIndex(config, 'tfidf');
+      onToast(`Indexed ${response.indexed_count} captures`);
+      await loadStats();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadStats();
+  }, [config.baseUrl, config.apiKey]);
+
+  const keepCount = useMemo(() => stats?.noise_counts.find((item) => item.is_noise === 0)?.count || 0, [stats]);
+  const noiseCount = useMemo(() => stats?.noise_counts.find((item) => item.is_noise === 1)?.count || 0, [stats]);
+  const unlabeledCount = useMemo(() => stats?.noise_counts.find((item) => item.is_noise === null)?.count || 0, [stats]);
+
+  return (
+    <div className="space-y-4">
+      <div className="toolbar">
+        <button className="command-button" onClick={loadStats} type="button">
+          <RefreshCw size={16} />
+          Refresh
+        </button>
+        <button className="command-button primary" onClick={refreshIndex} type="button">
+          {refreshing ? <Loader2 size={16} className="animate-spin" /> : <HardDrive size={16} />}
+          Reindex
+        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-4">
+        <Metric label="Captures" value={stats?.total_captures ?? 0} icon={Database} />
+        <Metric label="Indexed" value={stats?.indexed_available ? 'Yes' : 'No'} icon={Activity} />
+        <Metric label="Keep" value={keepCount} icon={Check} />
+        <Metric label="Noise" value={noiseCount} icon={X} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Breakdown title="Apps" rows={stats?.counts_by_app || []} labelKey="app_name" />
+        <Breakdown title="Sources" rows={stats?.counts_by_source_type || []} labelKey="source_type" />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="surface">
+          <div className="surface-title">Labels</div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+            <Badge label="Keep" value={keepCount} />
+            <Badge label="Noise" value={noiseCount} />
+            <Badge label="Unlabeled" value={unlabeledCount} />
+          </div>
+        </div>
+        <div className="surface">
+          <div className="surface-title">Database</div>
+          <div className="mt-3 break-all text-sm text-slate-700">{stats?.database_path || 'None'}</div>
+          <div className="mt-2 text-sm text-slate-600">Latest: {formatTime(stats?.latest_capture_at || null)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({
+  config,
+  onConfig,
+  onHealth,
+  apiKeyEnabled,
+  onError,
+  onToast,
+}: {
+  config: ClientConfig;
+  onConfig: (value: ClientConfig) => void;
+  onHealth: () => void;
+  apiKeyEnabled: boolean;
+  onError: (value: string) => void;
+  onToast: (value: string) => void;
+}) {
+  const [privacy, setPrivacy] = useState<PrivacySettings>({
+    blocked_apps: [],
+    blocked_domains: [],
+    excluded_path_fragments: [],
+  });
+  const [forgetHours, setForgetHours] = useState('24');
+  const [forgetSource, setForgetSource] = useState('');
+
+  const loadPrivacy = async () => {
+    try {
+      setPrivacy(await api.privacy(config));
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  useEffect(() => {
+    void loadPrivacy();
+  }, [config.baseUrl, config.apiKey]);
+
+  const savePrivacy = async () => {
+    try {
+      await api.savePrivacy(config, privacy);
+      onToast('Privacy settings saved');
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const exportData = async () => {
+    try {
+      const data = await api.exportData(config);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `memoryos-export-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      onToast('Export ready');
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const forgetCaptures = async () => {
+    const hours = Math.max(1, Number(forgetHours) || 24);
+    const from = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    try {
+      const result = await api.forget(config, {
+        from_timestamp: from,
+        source_type: forgetSource || undefined,
+        confirm: true,
+      });
+      onToast(`Deleted ${result.deleted_count} captures`);
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const listValue = (items: string[]) => items.join('\n');
+  const updateList = (key: keyof PrivacySettings, value: string) => {
+    setPrivacy({
+      ...privacy,
+      [key]: value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="surface">
+        <div className="surface-title">Backend</div>
+        <div className="mt-4 grid gap-3">
+          <label className="field-label">
+            URL
+            <input
+              className="settings-input"
+              value={config.baseUrl}
+              onChange={(event) => onConfig({ ...config, baseUrl: event.target.value })}
+            />
+          </label>
+          <label className="field-label">
+            API Key
+            <input
+              className="settings-input"
+              value={config.apiKey}
+              onChange={(event) => onConfig({ ...config, apiKey: event.target.value })}
+              type="password"
+            />
+          </label>
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Shield size={16} />
+            <span>{apiKeyEnabled ? 'Enabled' : 'Disabled'}</span>
+          </div>
+          <button className="command-button w-fit" onClick={onHealth} type="button">
+            <RefreshCw size={16} />
+            Check
+          </button>
+        </div>
+      </div>
+      <div className="surface">
+        <div className="surface-title">Privacy</div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <label className="field-label">
+            Blocked Apps
+            <textarea
+              className="settings-area"
+              value={listValue(privacy.blocked_apps)}
+              onChange={(event) => updateList('blocked_apps', event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Blocked Domains
+            <textarea
+              className="settings-area"
+              value={listValue(privacy.blocked_domains)}
+              onChange={(event) => updateList('blocked_domains', event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Excluded Paths
+            <textarea
+              className="settings-area"
+              value={listValue(privacy.excluded_path_fragments)}
+              onChange={(event) => updateList('excluded_path_fragments', event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className="command-button" onClick={savePrivacy} type="button">
+            <Check size={16} />
+            Save
+          </button>
+          <button className="command-button" onClick={loadPrivacy} type="button">
+            <RefreshCw size={16} />
+            Reload
+          </button>
+        </div>
+      </div>
+      <div className="surface">
+        <div className="surface-title">Data Controls</div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="command-button" onClick={exportData} type="button">
+            <ExternalLink size={16} />
+            Export JSON
+          </button>
+          <input
+            className="compact-input"
+            value={forgetHours}
+            onChange={(event) => setForgetHours(event.target.value)}
+            inputMode="numeric"
+            aria-label="Forget hours"
+          />
+          <select className="compact-input" value={forgetSource} onChange={(event) => setForgetSource(event.target.value)}>
+            <option value="">All sources</option>
+            <option value="accessibility">Accessibility</option>
+            <option value="browser">Browser</option>
+            <option value="file">File</option>
+            <option value="screenshot">Screenshot</option>
+          </select>
+          <button className="command-button danger" onClick={forgetCaptures} type="button">
+            <X size={16} />
+            Forget Hours
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResultList({
+  config,
+  query,
+  results,
+  onError,
+}: {
+  config: ClientConfig;
+  query: string;
+  results: CaptureResult[];
+  onError: (value: string) => void;
+}) {
+  const handleOpen = async (capture: CaptureResult) => {
+    if (query.trim()) {
+      try {
+        await api.logClick(config, query.trim(), capture.id, capture.rank);
+      } catch (err) {
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    }
+    openCapture(capture);
+  };
+
+  if (!results.length) return <EmptyState label="No results" />;
+
+  return (
+    <div className="space-y-3">
+      {results.map((capture) => (
+        <CaptureCard key={capture.id} capture={capture}>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(capture.url || capture.file_path) && (
+              <button className="command-button" onClick={() => handleOpen(capture)} type="button">
+                <ExternalLink size={16} />
+                Open
+              </button>
+            )}
+            <span className="status-pill">{labelText(capture.is_noise)}</span>
+            {capture.score !== null && <span className="status-pill">Score {capture.score.toFixed(3)}</span>}
+          </div>
+        </CaptureCard>
+      ))}
+    </div>
+  );
+}
+
+function CaptureCard({
+  capture,
+  children,
+}: {
+  capture: CaptureResult;
+  children?: ReactNode;
+}) {
+  return (
+    <article className="capture-card">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="truncate text-base font-semibold">
+            {capture.window_title || capture.url || capture.file_path || `Capture ${capture.id}`}
+          </h2>
+          <div className="mt-1 text-sm text-slate-600">{sourceLabel(capture)}</div>
+        </div>
+        <div className="shrink-0 rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">#{capture.id}</div>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-800">{capture.snippet}</p>
+      {children}
+    </article>
+  );
+}
+
+function EmptyState({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-[180px] items-center justify-center border border-dashed border-line bg-white text-sm text-slate-500">
+      {label}
+    </div>
+  );
+}
+
+function Metric({ label, value, icon: Icon }: { label: string; value: string | number; icon: typeof Database }) {
+  return (
+    <div className="surface">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-600">{label}</div>
+        <Icon size={17} className="text-signal" />
+      </div>
+      <div className="mt-3 text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function Breakdown({
+  title,
+  rows,
+  labelKey,
+}: {
+  title: string;
+  rows: Array<Record<string, string | number>>;
+  labelKey: string;
+}) {
+  return (
+    <div className="surface">
+      <div className="surface-title">{title}</div>
+      <div className="mt-3 divide-y divide-line">
+        {rows.map((row) => (
+          <div key={String(row[labelKey])} className="flex items-center justify-between gap-4 py-2 text-sm">
+            <span className="truncate text-slate-700">{row[labelKey]}</span>
+            <span className="font-medium">{row.count}</span>
+          </div>
+        ))}
+        {!rows.length && <div className="py-2 text-sm text-slate-500">None</div>}
+      </div>
+    </div>
+  );
+}
+
+function Badge({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="border border-line bg-panel px-3 py-2">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
