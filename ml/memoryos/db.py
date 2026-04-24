@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+from typing import Iterable, List, Optional, Sequence
+
+from .config import database_path
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS captures (
+  id           INTEGER PRIMARY KEY,
+  timestamp    DATETIME NOT NULL,
+  app_name     TEXT NOT NULL,
+  window_title TEXT,
+  content      TEXT NOT NULL,
+  source_type  TEXT NOT NULL,
+  url          TEXT,
+  file_path    TEXT,
+  is_noise     INTEGER DEFAULT NULL,
+  embedding    BLOB
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id          INTEGER PRIMARY KEY,
+  app_name    TEXT NOT NULL,
+  start_time  DATETIME NOT NULL,
+  end_time    DATETIME,
+  duration_s  INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS search_clicks (
+  id          INTEGER PRIMARY KEY,
+  query       TEXT NOT NULL,
+  capture_id  INTEGER NOT NULL,
+  rank        INTEGER,
+  clicked_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(capture_id) REFERENCES captures(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_captures_timestamp ON captures(timestamp);
+CREATE INDEX IF NOT EXISTS idx_captures_app ON captures(app_name);
+CREATE INDEX IF NOT EXISTS idx_captures_noise ON captures(is_noise);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_capture ON search_clicks(capture_id);
+"""
+
+
+CAPTURE_COLUMNS = """
+id, timestamp, app_name, window_title, content, source_type, url, file_path, is_noise
+"""
+
+
+def connect(path: Optional[Path] = None) -> sqlite3.Connection:
+    db_path = Path(path or database_path())
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA)
+    return conn
+
+
+def capture_count(conn: sqlite3.Connection) -> int:
+    row = conn.execute("SELECT COUNT(*) AS count FROM captures").fetchone()
+    return int(row["count"])
+
+
+def fetch_captures(
+    conn: sqlite3.Connection,
+    limit: Optional[int] = None,
+    labeled: Optional[bool] = None,
+    non_noise: bool = False,
+) -> List[sqlite3.Row]:
+    where = []
+    params: List[object] = []
+    if labeled is True:
+        where.append("is_noise IS NOT NULL")
+    elif labeled is False:
+        where.append("is_noise IS NULL")
+    if non_noise:
+        where.append("(is_noise = 0 OR is_noise IS NULL)")
+
+    sql = f"SELECT {CAPTURE_COLUMNS} FROM captures"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY timestamp DESC"
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    return list(conn.execute(sql, params))
+
+
+def fetch_captures_by_ids(conn: sqlite3.Connection, ids: Sequence[int]) -> List[sqlite3.Row]:
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT {CAPTURE_COLUMNS} FROM captures WHERE id IN ({placeholders})",
+        list(ids),
+    ).fetchall()
+    by_id = {int(row["id"]): row for row in rows}
+    return [by_id[capture_id] for capture_id in ids if capture_id in by_id]
+
+
+def update_noise_labels(conn: sqlite3.Connection, labels: Iterable[tuple[int, int]]) -> int:
+    values = [(int(label), int(capture_id)) for capture_id, label in labels]
+    conn.executemany("UPDATE captures SET is_noise = ? WHERE id = ?", values)
+    conn.commit()
+    return len(values)
+
+
+def update_embeddings(conn: sqlite3.Connection, values: Iterable[tuple[int, bytes]]) -> int:
+    rows = [(blob, int(capture_id)) for capture_id, blob in values]
+    conn.executemany("UPDATE captures SET embedding = ? WHERE id = ?", rows)
+    conn.commit()
+    return len(rows)

@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+
+# Swift
+.build/
+DerivedData/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node / web
+node_modules/
+dist/
+build/
+.vite/
+.env
+.env.*
+
+# MemoryOS local runtime data
+*.db
+*.db-shm
+*.db-wal
+ml/data/raw/*
+ml/data/processed/*
+ml/models/*
+
+!ml/data/raw/.gitkeep
+!ml/data/processed/.gitkeep
+!ml/models/.gitkeep

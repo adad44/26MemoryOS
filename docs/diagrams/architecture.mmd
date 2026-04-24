@@ -1,0 +1,34 @@
+flowchart LR
+  subgraph mac["macOS Capture"]
+    ax["Accessibility Poller"]
+    sessions["NSWorkspace Session Tracker"]
+    files["FSEvents File Watcher"]
+    screenshots["Screenshot OCR Fallback"]
+  end
+
+  browser["Browser Extension"]
+  ingest["Local Browser Ingest\n127.0.0.1:8765"]
+  sqlite[("SQLite\ncaptures + sessions")]
+
+  subgraph ml["ML Pipeline"]
+    noise["Noise Classifier"]
+    embedder["Embedding Model"]
+    faiss[("FAISS Index")]
+    reranker["Temporal Re-ranker"]
+  end
+
+  api["FastAPI Backend\n/search /stats /recent"]
+  web["React Web UI"]
+  menu["SwiftUI Menu Bar App"]
+
+  ax --> sqlite
+  sessions --> sqlite
+  files --> sqlite
+  screenshots -. "Phase 1 hook" .-> sqlite
+  browser --> ingest --> sqlite
+  sqlite --> noise --> embedder --> faiss --> api
+  sqlite --> api
+  reranker --> api
+  api --> web
+  menu --> web
+  menu --> sqlite

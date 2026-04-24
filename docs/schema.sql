@@ -1,0 +1,42 @@
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE IF NOT EXISTS captures (
+  id           INTEGER PRIMARY KEY,
+  timestamp    DATETIME NOT NULL,
+  app_name     TEXT NOT NULL,
+  window_title TEXT,
+  content      TEXT NOT NULL,
+  source_type  TEXT NOT NULL CHECK (
+    source_type IN ('accessibility', 'browser', 'file', 'screenshot')
+  ),
+  url          TEXT,
+  file_path    TEXT,
+  is_noise     INTEGER DEFAULT NULL CHECK (
+    is_noise IS NULL OR is_noise IN (0, 1)
+  ),
+  embedding    BLOB
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id          INTEGER PRIMARY KEY,
+  app_name    TEXT NOT NULL,
+  start_time  DATETIME NOT NULL,
+  end_time    DATETIME,
+  duration_s  INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS search_clicks (
+  id          INTEGER PRIMARY KEY,
+  query       TEXT NOT NULL,
+  capture_id  INTEGER NOT NULL,
+  rank        INTEGER,
+  clicked_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(capture_id) REFERENCES captures(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_captures_timestamp ON captures(timestamp);
+CREATE INDEX IF NOT EXISTS idx_captures_app ON captures(app_name);
+CREATE INDEX IF NOT EXISTS idx_captures_source_type ON captures(source_type);
+CREATE INDEX IF NOT EXISTS idx_captures_noise ON captures(is_noise);
+CREATE INDEX IF NOT EXISTS idx_sessions_app ON sessions(app_name);
+CREATE INDEX IF NOT EXISTS idx_search_clicks_capture ON search_clicks(capture_id);
