@@ -4,10 +4,15 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject private var client: MemoryOSClient
     @State private var showingSettings = false
+    @State private var showingSetup = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            if showingSetup || client.permissions.needsAttention {
+                Divider()
+                onboarding
+            }
             Divider()
             stats
             actions
@@ -19,7 +24,10 @@ struct MenuBarView: View {
             footer
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: 360)
+        .onAppear {
+            client.refreshPermissions()
+        }
     }
 
     private var header: some View {
@@ -47,6 +55,65 @@ struct MenuBarView: View {
             }
             .buttonStyle(.borderless)
             .help("Refresh status")
+        }
+    }
+
+    private var onboarding: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Setup")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    client.refreshPermissions()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh permissions")
+                Button {
+                    showingSetup.toggle()
+                } label: {
+                    Image(systemName: showingSetup ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .help(showingSetup ? "Hide setup" : "Show setup")
+            }
+
+            if showingSetup {
+                permissionRow(
+                    title: "Accessibility",
+                    detail: "Required for active-window text capture",
+                    status: client.permissions.accessibilityGranted ? "Ready" : "Needs access",
+                    systemImage: client.permissions.accessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+                    tint: client.permissions.accessibilityGranted ? .green : .orange,
+                    actionTitle: client.permissions.accessibilityGranted ? "Open" : "Allow"
+                ) {
+                    client.requestAccessibilityPermission()
+                }
+
+                permissionRow(
+                    title: "Full Disk Access",
+                    detail: "Recommended so file watching can read protected folders",
+                    status: client.permissions.fullDiskAccessStatus.label,
+                    systemImage: client.permissions.fullDiskAccessStatus == .likelyGranted ? "checkmark.circle.fill" : "folder.badge.gearshape",
+                    tint: client.permissions.fullDiskAccessStatus == .likelyGranted ? .green : .orange,
+                    actionTitle: "Open"
+                ) {
+                    client.openFullDiskAccessSettings()
+                }
+
+                permissionRow(
+                    title: "Screen Recording",
+                    detail: "Fallback only; not used by normal capture",
+                    status: client.permissions.screenRecordingGranted ? "Ready" : "Optional",
+                    systemImage: client.permissions.screenRecordingGranted ? "checkmark.circle.fill" : "rectangle.dashed",
+                    tint: client.permissions.screenRecordingGranted ? .green : .secondary,
+                    actionTitle: client.permissions.screenRecordingGranted ? "Open" : "Request"
+                ) {
+                    client.requestScreenRecordingPermission()
+                }
+            }
         }
     }
 
@@ -86,6 +153,11 @@ struct MenuBarView: View {
                 showingSettings.toggle()
             } label: {
                 actionLabel(showingSettings ? "Hide Settings" : "Settings", systemImage: "gearshape")
+            }
+            Button {
+                showingSetup.toggle()
+            } label: {
+                actionLabel(showingSetup ? "Hide Setup" : "Setup Permissions", systemImage: "lock.shield")
             }
         }
         .buttonStyle(.plain)
@@ -146,6 +218,47 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func permissionRow(
+        title: String,
+        detail: String,
+        status: String,
+        systemImage: String,
+        tint: Color,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .frame(width: 18)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(title)
+                        .font(.callout)
+                        .fontWeight(.medium)
+                    Spacer()
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(actionTitle) {
+                action()
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .padding(.top, 1)
+        }
+        .padding(8)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }

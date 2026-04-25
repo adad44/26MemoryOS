@@ -1,71 +1,157 @@
 # MemoryOS
 
-MemoryOS is a local-first personal knowledge engine for macOS and web. It captures useful context from active windows, browser pages, and local files into SQLite, then later uses ML embeddings and vector search to make that history searchable.
+MemoryOS is a local-first memory and search system for your computer. It captures useful context from browser pages, active macOS windows, and local files, stores that data in SQLite on your Mac, and lets you search it later through a local web app.
 
-Current status: Phase 0 is complete and Phase 1 has a working baseline scaffold.
+The short version: run MemoryOS locally, collect a small amount of context, build a search index, then use the web UI to search, review, label, export, or delete your data.
 
-## Roadmap
+## Who This Is For
 
-| Phase | Name | Status |
-| :-- | :-- | :-- |
-| 0 | Setup & Architecture | Complete |
-| 1 | Data Capture Layer | Baseline implemented |
-| 2 | ML Pipeline | Code complete; needs captured/labeled data |
-| 3 | Search Backend | Complete |
-| 4 | Web Interface | Complete |
-| 5 | Mac Menu Bar App | Complete |
-| 6 | Polish & Deploy | Complete |
+- People who want searchable personal work history without sending captures to a hosted service.
+- Developers who want a local FastAPI, React, Swift, and ML project to build on.
+- Students or portfolio builders who want a complete local-first AI systems project.
+- Anyone using an AI coding agent who wants the agent to launch and operate the repo for them.
+
+## What You Get
+
+- Local FastAPI backend for capture ingest, search, stats, privacy settings, export, and delete.
+- React web UI for search, recent captures, batch labeling, stats, and settings.
+- Chrome extension for browser-page capture.
+- Swift macOS daemon for native window/file context capture.
+- Swift menu bar app for status, opening the UI, refreshing the index, and pausing capture.
+- TF-IDF search that works immediately, plus hooks for sentence-transformer and FAISS indexing.
+
+## Quick Start
+
+The full beginner-friendly setup guide is here:
+
+[docs/QUICKSTART.md](docs/QUICKSTART.md)
+
+Fast path if you already know the tooling:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -r backend/requirements.txt
+scripts/run_backend.sh
+```
+
+In a second terminal:
+
+```sh
+cd web
+npm install
+npm run dev
+```
+
+Open the web UI:
+
+```text
+http://127.0.0.1:5173
+```
+
+## Use It With An AI Coding Agent
+
+If you use Codex, Claude Code, Cursor, or another coding agent, point the agent at this repository and ask it to run the quickstart for you.
+
+Copy this prompt:
+
+```text
+You are in the MemoryOS repository. Read README.md and docs/QUICKSTART.md, then run MemoryOS locally. Install the needed Python and Node dependencies, start the FastAPI backend, start the React web UI, add one test capture, build a TF-IDF index, verify search works, and tell me the local URLs. Do not delete local data unless I explicitly ask.
+```
+
+If the agent is not already inside the repo, give it the path first:
+
+```text
+Go to /path/to/memoryos, read README.md and docs/QUICKSTART.md, then run the local MemoryOS quickstart.
+```
+
+For this local checkout, the path is usually the folder that contains this README.
+
+## Everyday Workflow
+
+1. Start the backend with `scripts/run_backend.sh`.
+2. Start the web UI with `cd web && npm run dev`.
+3. Add captures through the Chrome extension, the macOS daemon, or a test API call.
+4. Open the Stats tab and click Reindex.
+5. Search from the Search tab.
+6. Use the Label tab to batch-mark visible captures as Keep or Noise.
+7. Use Settings to manage privacy lists, export JSON, or delete filtered captures.
+
+## Privacy Model
+
+MemoryOS is designed to run on your Mac. By default:
+
+- The backend binds to `127.0.0.1`.
+- Captures are stored in a local SQLite database.
+- The web UI talks to the local backend.
+- The Chrome extension posts to the local backend.
+- You can export or delete captured data from the UI.
+
+Default database path:
+
+```text
+~/Library/Application Support/MemoryOS/memoryos.db
+```
+
+Use a disposable database while testing:
+
+```sh
+MEMORYOS_DB=/tmp/memoryos.db scripts/run_backend.sh
+```
+
+The prototype is unsigned. The menu bar app includes local permission onboarding for Accessibility, Full Disk Access review, and Screen Recording fallback setup. If you distribute it outside local development, you should add app signing and notarization.
 
 ## Project Structure
 
 ```text
 memoryos/
+├── backend/         # FastAPI search, capture, stats, privacy, export, delete
+├── web/             # React UI for search, review, labeling, stats, settings
+├── extension/       # Chrome extension for browser capture
 ├── daemon/          # Swift background capture process
-├── extension/       # Chrome browser extension
-├── ml/              # Python ML training and inference
-│   ├── data/        # Raw and processed local training data
-│   ├── models/      # Saved model weights and indexes
-│   ├── train/       # Training scripts
-│   └── serve/       # Inference helpers
-├── backend/         # Future FastAPI search backend
-├── web/             # Future React frontend
-├── docs/            # Architecture, schema, and phase notes
-└── scripts/         # Local helper scripts
+├── menubar/         # Swift menu bar app
+├── ml/              # Search/indexing and model training code
+├── docs/            # Setup, architecture, deployment, phase notes
+├── scripts/         # Build, run, install, benchmark, export helpers
+└── config/          # Example privacy configuration
 ```
 
-## Phase 1 Quick Start
+## Main Commands
 
-Build the daemon:
-
-```sh
-scripts/build_daemon.sh
-```
-
-Run it:
-
-```sh
-daemon/.build/memoryos-daemon
-```
-
-Run browser ingest in a second terminal:
-
-```sh
-python3 scripts/browser_ingest_server.py
-```
-
-Then load `extension/` as an unpacked Chrome extension.
-
-More detail is in [docs/PHASE1.md](docs/PHASE1.md).
-
-## Backend Quick Start
-
-Run the local FastAPI backend:
+Run backend:
 
 ```sh
 scripts/run_backend.sh
 ```
 
-Build an index from captured data:
+Run web UI:
+
+```sh
+cd web
+npm run dev
+```
+
+Build native daemon:
+
+```sh
+scripts/build_daemon.sh
+```
+
+Run native daemon:
+
+```sh
+daemon/.build/memoryos-daemon
+```
+
+Build and open menu bar app:
+
+```sh
+scripts/build_menubar.sh
+open menubar/dist/MemoryOS.app
+```
+
+Build search index:
 
 ```sh
 curl -X POST http://127.0.0.1:8765/refresh-index \
@@ -78,68 +164,31 @@ Search:
 ```sh
 curl -X POST http://127.0.0.1:8765/search \
   -H "Content-Type: application/json" \
-  -d '{"query":"python traceback embedding search","top_k":10}'
+  -d '{"query":"local searchable context","top_k":10}'
 ```
 
-## Web UI Quick Start
+## Current Status
 
-```sh
-cd web
-npm install
-npm run dev
-```
+All planned prototype phases are implemented for local development:
 
-Open:
+| Phase | Name | Status |
+| :-- | :-- | :-- |
+| 0 | Setup & Architecture | Complete |
+| 1 | Data Capture Layer | Baseline implemented |
+| 2 | ML Pipeline | Code complete; needs captured/labeled data |
+| 3 | Search Backend | Complete |
+| 4 | Web Interface | Complete |
+| 5 | Mac Menu Bar App | Complete |
+| 6 | Polish & Deploy | Complete |
 
-```text
-http://127.0.0.1:5173
-```
+Remaining real-world work includes training production models on real labeled data, app signing/notarization, and additional permission onboarding.
 
-## Menu Bar Quick Start
+## More Documentation
 
-```sh
-scripts/build_menubar.sh
-open menubar/dist/MemoryOS.app
-```
-
-Install login startup:
-
-```sh
-scripts/install_daemon_launch_agent.sh
-scripts/install_menubar_launch_agent.sh
-```
-
-## Polish and Privacy
-
-Benchmark backend latency:
-
-```sh
-scripts/benchmark_backend.py --captures 500 --runs 20
-```
-
-Export local data:
-
-```sh
-scripts/export_memoryos.sh
-```
-
-## Local Data
-
-The default SQLite database location is:
-
-```text
-~/Library/Application Support/MemoryOS/memoryos.db
-```
-
-Override it for testing:
-
-```sh
-MEMORYOS_DB=/tmp/memoryos.db daemon/.build/memoryos-daemon
-```
-
-## Documentation
-
+- [Quickstart](docs/QUICKSTART.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Demo script](docs/DEMO_SCRIPT.md)
 - [SQLite schema](docs/schema.sql)
 - [Phase 1 notes](docs/PHASE1.md)
 - [Phase 2 notes](docs/PHASE2.md)
@@ -147,6 +196,3 @@ MEMORYOS_DB=/tmp/memoryos.db daemon/.build/memoryos-daemon
 - [Phase 4 notes](docs/PHASE4.md)
 - [Phase 5 notes](docs/PHASE5.md)
 - [Phase 6 notes](docs/PHASE6.md)
-- [Deployment](docs/DEPLOYMENT.md)
-- [Demo script](docs/DEMO_SCRIPT.md)
-- [Roadmap source](MemoryOS_Roadmap-2.md)

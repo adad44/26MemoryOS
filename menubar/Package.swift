@@ -15,6 +15,8 @@ let package = Package(
             name: "MemoryOSMenuBar",
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("ApplicationServices"),
+                .linkedFramework("CoreGraphics"),
                 .linkedFramework("SwiftUI")
             ]
         )

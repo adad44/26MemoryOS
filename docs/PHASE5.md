@@ -44,12 +44,24 @@ open menubar/dist/MemoryOS.app
 - Index readiness.
 - Latest capture timestamp.
 - Capture active/paused state.
+- Setup panel for macOS permissions.
+- Accessibility status and shortcut to the Accessibility privacy pane.
+- Full Disk Access review shortcut for file capture.
+- Screen Recording fallback status and request action.
 - Open Search.
 - Pause/Resume Capture.
 - Refresh Index.
 - Open backend API docs.
 - Backend URL, web URL, and API key settings.
 - Quit.
+
+## Permission Onboarding
+
+The menu bar app now includes a SwiftUI setup panel for local macOS permissions:
+
+- Accessibility is required for `AXUIElement` active-window text capture. The setup panel checks `AXIsProcessTrusted()`, can trigger the macOS prompt, and opens the Accessibility privacy pane.
+- Full Disk Access is recommended for broader file capture. macOS does not provide a public API to grant this automatically, so the setup panel opens the Full Disk Access privacy pane and performs a best-effort protected-folder read check.
+- Screen Recording is listed as fallback-only. The current daemon does not use screenshot OCR for normal capture, but the setup panel can request/open the Screen Recording pane for future fallback work.
 
 ## Pause Capture
 
@@ -69,10 +81,22 @@ Install daemon launch at login:
 scripts/install_daemon_launch_agent.sh
 ```
 
+Install backend launch at login:
+
+```sh
+scripts/install_backend_launch_agent.sh
+```
+
 Uninstall daemon launch agent:
 
 ```sh
 scripts/uninstall_daemon_launch_agent.sh
+```
+
+Uninstall backend launch agent:
+
+```sh
+scripts/uninstall_backend_launch_agent.sh
 ```
 
 Install menu bar launch at login:
@@ -91,6 +115,7 @@ The plist files are written to:
 
 ```text
 ~/Library/LaunchAgents/com.memoryos.daemon.plist
+~/Library/LaunchAgents/com.memoryos.backend.plist
 ~/Library/LaunchAgents/com.memoryos.menubar.plist
 ```
 

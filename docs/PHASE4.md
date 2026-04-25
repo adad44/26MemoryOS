@@ -29,9 +29,10 @@ http://127.0.0.1:5173
 ### Search
 
 - Debounced semantic search.
-- Result cards with title, app, source, timestamp, snippet, score, and label state.
-- Open action for URLs and file paths.
-- Click logging through `POST /click`.
+- Result cards with title, app, source, relative timestamp, snippet, similarity/rerank scores, and label state.
+- Search metadata shows index backend, candidate count, re-ranker mode, and measured latency.
+- Open action sends the capture to the local backend so macOS can open URLs and file paths directly.
+- Click logging through `POST /click`, including result dwell time for re-ranker training.
 
 ### Recent
 
@@ -40,8 +41,10 @@ http://127.0.0.1:5173
 
 ### Label
 
-- Keep/noise/manual clear controls.
+- Batch keep/noise/manual clear controls for visible or selected captures.
+- Filters by label state, app, and source.
 - Uses `PATCH /captures/{id}/noise`.
+- Uses `PATCH /captures/noise/bulk` for batch review.
 
 ### Stats
 

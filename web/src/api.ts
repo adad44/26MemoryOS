@@ -1,6 +1,8 @@
 export type CaptureResult = {
   id: number;
   score: number | null;
+  similarity_score: number | null;
+  rerank_score: number | null;
   rank: number | null;
   timestamp: string;
   app_name: string;
@@ -16,6 +18,10 @@ export type CaptureResult = {
 export type SearchResponse = {
   query: string;
   count: number;
+  candidate_count: number;
+  elapsed_ms: number;
+  index_backend: string;
+  reranker: string;
   results: CaptureResult[];
 };
 
@@ -99,23 +105,34 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ query, top_k: topK }),
     }),
-  refreshIndex: (config: ClientConfig, backend = 'tfidf') =>
-    request<{ indexed_count: number; artifact_path: string }>(config, '/refresh-index', {
+  refreshIndex: (config: ClientConfig, backend = 'auto') =>
+    request<{ indexed_count: number; artifact_path: string; backend: string }>(config, '/refresh-index', {
       method: 'POST',
       body: JSON.stringify({ backend }),
     }),
-  logClick: (config: ClientConfig, query: string, captureId: number, rank: number | null) => {
+  logClick: (config: ClientConfig, query: string, captureId: number, rank: number | null, dwellMs?: number) => {
     const params = new URLSearchParams({
       query,
       capture_id: String(captureId),
     });
     if (rank !== null) params.set('rank', String(rank));
+    if (dwellMs !== undefined) params.set('dwell_ms', String(Math.max(0, Math.round(dwellMs))));
     return request<void>(config, `/click?${params.toString()}`, { method: 'POST' });
   },
+  openCapture: (config: ClientConfig, captureId: number) =>
+    request<{ opened: boolean; target: string }>(config, '/open', {
+      method: 'POST',
+      body: JSON.stringify({ capture_id: captureId }),
+    }),
   labelNoise: (config: ClientConfig, captureId: number, isNoise: number | null) =>
     request<void>(config, `/captures/${captureId}/noise`, {
       method: 'PATCH',
       body: JSON.stringify({ is_noise: isNoise }),
+    }),
+  bulkLabelNoise: (config: ClientConfig, captureIds: number[], isNoise: number | null) =>
+    request<{ updated_count: number }>(config, '/captures/noise/bulk', {
+      method: 'PATCH',
+      body: JSON.stringify({ capture_ids: captureIds, is_noise: isNoise }),
     }),
   privacy: (config: ClientConfig) => request<PrivacySettings>(config, '/privacy'),
   savePrivacy: (config: ClientConfig, settings: PrivacySettings) =>

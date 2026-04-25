@@ -55,6 +55,7 @@ The daemon reads this file at startup.
 Completed:
 
 - `README.md`
+- `docs/QUICKSTART.md`
 - `docs/ARCHITECTURE.md`
 - `docs/schema.sql`
 - Phase reports: `docs/PHASE0.md` through `docs/PHASE6.md`
@@ -78,6 +79,6 @@ These require real user data or signing/distribution work:
 
 - Train production noise classifier after labeling captures.
 - Fine-tune embedding model after collecting enough captures.
-- Train re-ranker after collecting click logs.
+- Train the production re-ranker after collecting click/dwell logs. Until then, live search uses the built-in temporal heuristic.
 - Replace FSEvents deprecated run loop scheduling with dispatch-queue scheduling.
 - Sign/notarize the menu bar app if distributing beyond local use.

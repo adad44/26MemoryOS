@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { api, CaptureResult, ClientConfig, PrivacySettings, StatsResponse } from './api';
+import { api, CaptureResult, ClientConfig, PrivacySettings, SearchResponse, StatsResponse } from './api';
 
 type Tab = 'search' | 'recent' | 'label' | 'stats' | 'settings';
 
@@ -56,8 +56,30 @@ function formatTime(value: string | null) {
   }).format(date);
 }
 
+function relativeTime(value: string | null) {
+  if (!value) return 'unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['year', 60 * 60 * 24 * 365],
+    ['month', 60 * 60 * 24 * 30],
+    ['week', 60 * 60 * 24 * 7],
+    ['day', 60 * 60 * 24],
+    ['hour', 60 * 60],
+    ['minute', 60],
+  ];
+  for (const [unit, seconds] of units) {
+    if (Math.abs(diffSeconds) >= seconds || unit === 'minute') {
+      return formatter.format(Math.round(diffSeconds / seconds), unit);
+    }
+  }
+  return 'just now';
+}
+
 function sourceLabel(capture: CaptureResult) {
-  return [capture.app_name, capture.source_type, formatTime(capture.timestamp)].join(' / ');
+  return [capture.app_name, capture.source_type, relativeTime(capture.timestamp)].join(' / ');
 }
 
 function openCapture(capture: CaptureResult) {
@@ -210,12 +232,16 @@ export function App() {
 function SearchView({ config, onError }: { config: ClientConfig; onError: (value: string) => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CaptureResult[]>([]);
+  const [searchMeta, setSearchMeta] = useState<SearchResponse | null>(null);
+  const [resultsLoadedAt, setResultsLoadedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
       setResults([]);
+      setSearchMeta(null);
+      setResultsLoadedAt(null);
       return;
     }
     const handle = window.setTimeout(async () => {
@@ -223,6 +249,8 @@ function SearchView({ config, onError }: { config: ClientConfig; onError: (value
       try {
         const response = await api.search(config, trimmed, 10);
         setResults(response.results);
+        setSearchMeta(response);
+        setResultsLoadedAt(Date.now());
         onError('');
       } catch (err) {
         onError(err instanceof Error ? err.message : String(err));
@@ -247,7 +275,19 @@ function SearchView({ config, onError }: { config: ClientConfig; onError: (value
         </div>
         {loading && <Loader2 className="animate-spin text-signal" size={20} />}
       </div>
-      <ResultList config={config} query={query} results={results} onError={onError} />
+      {searchMeta && (
+        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+          <span className="status-pill">{searchMeta.index_backend}</span>
+          <span className="status-pill">{searchMeta.reranker} reranker</span>
+          <span className="status-pill">{searchMeta.candidate_count} candidates</span>
+          <span className="status-pill">{searchMeta.elapsed_ms.toFixed(1)} ms</span>
+        </div>
+      )}
+      {query.trim() ? (
+        <ResultList config={config} query={query} results={results} resultsLoadedAt={resultsLoadedAt} onError={onError} />
+      ) : (
+        <EmptyState label="Type a query to search" />
+      )}
     </div>
   );
 }
@@ -306,66 +346,178 @@ function LabelView({
   onError: (value: string) => void;
   onToast: (value: string) => void;
 }) {
-  const [results, setResults] = useState<CaptureResult[]>([]);
-  const [filter, setFilter] = useState<'all' | 'unlabeled'>('unlabeled');
+  const [captures, setCaptures] = useState<CaptureResult[]>([]);
+  const [labelFilter, setLabelFilter] = useState<'unlabeled' | 'all' | 'keep' | 'noise'>('unlabeled');
+  const [appFilter, setAppFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
-      const response = await api.recent(config, 100);
-      setResults(filter === 'unlabeled' ? response.results.filter((item) => item.is_noise === null) : response.results);
+      const response = await api.recent(config, 200);
+      setCaptures(response.results);
+      setSelectedIds(new Set());
       onError('');
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
     }
   };
 
-  const label = async (capture: CaptureResult, value: number | null) => {
+  const visibleCaptures = useMemo(
+    () =>
+      captures.filter((capture) => {
+        if (labelFilter === 'unlabeled' && capture.is_noise !== null) return false;
+        if (labelFilter === 'keep' && capture.is_noise !== 0) return false;
+        if (labelFilter === 'noise' && capture.is_noise !== 1) return false;
+        if (appFilter && capture.app_name !== appFilter) return false;
+        if (sourceFilter && capture.source_type !== sourceFilter) return false;
+        return true;
+      }),
+    [captures, labelFilter, appFilter, sourceFilter],
+  );
+
+  const appOptions = useMemo(
+    () => Array.from(new Set(captures.map((capture) => capture.app_name))).sort(),
+    [captures],
+  );
+  const sourceOptions = useMemo(
+    () => Array.from(new Set(captures.map((capture) => capture.source_type))).sort(),
+    [captures],
+  );
+
+  const selectedVisibleIds = useMemo(
+    () => visibleCaptures.map((capture) => capture.id).filter((id) => selectedIds.has(id)),
+    [visibleCaptures, selectedIds],
+  );
+
+  const targetIds = selectedVisibleIds.length ? selectedVisibleIds : visibleCaptures.map((capture) => capture.id);
+  const actionScope = selectedVisibleIds.length ? 'selected' : 'visible';
+
+  const setVisibleSelection = (checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleCaptures.forEach((capture) => {
+        if (checked) {
+          next.add(capture.id);
+        } else {
+          next.delete(capture.id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const toggleSelection = (captureId: number, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(captureId);
+      } else {
+        next.delete(captureId);
+      }
+      return next;
+    });
+  };
+
+  const labelBatch = async (value: number | null) => {
+    if (!targetIds.length) return;
+    setSaving(true);
     try {
-      await api.labelNoise(config, capture.id, value);
-      setResults((items) => items.map((item) => (item.id === capture.id ? { ...item, is_noise: value } : item)));
-      onToast(`Capture ${capture.id}: ${labelText(value)}`);
+      const response = await api.bulkLabelNoise(config, targetIds, value);
+      const updated = new Set(targetIds);
+      setCaptures((items) => items.map((item) => (updated.has(item.id) ? { ...item, is_noise: value } : item)));
+      setSelectedIds(new Set());
+      onToast(`${labelText(value)} applied to ${response.updated_count} ${actionScope} captures`);
       onError('');
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
     }
   };
 
   useEffect(() => {
     void load();
-  }, [filter, config.baseUrl, config.apiKey]);
+  }, [config.baseUrl, config.apiKey]);
 
   return (
     <div className="space-y-4">
       <div className="toolbar">
-        <select className="compact-input" value={filter} onChange={(e) => setFilter(e.target.value as 'all' | 'unlabeled')}>
+        <select
+          className="compact-input"
+          value={labelFilter}
+          onChange={(e) => setLabelFilter(e.target.value as 'unlabeled' | 'all' | 'keep' | 'noise')}
+        >
           <option value="unlabeled">Unlabeled</option>
           <option value="all">All captures</option>
+          <option value="keep">Keep</option>
+          <option value="noise">Noise</option>
+        </select>
+        <select className="compact-input" value={appFilter} onChange={(e) => setAppFilter(e.target.value)}>
+          <option value="">All apps</option>
+          {appOptions.map((appName) => (
+            <option key={appName} value={appName}>
+              {appName}
+            </option>
+          ))}
+        </select>
+        <select className="compact-input" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+          <option value="">All sources</option>
+          {sourceOptions.map((source) => (
+            <option key={source} value={source}>
+              {source}
+            </option>
+          ))}
         </select>
         <button className="command-button" onClick={load} type="button">
-          <RefreshCw size={16} />
+          {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
           Refresh
         </button>
       </div>
+      <div className="toolbar">
+        <label className="selection-control">
+          <input
+            checked={visibleCaptures.length > 0 && selectedVisibleIds.length === visibleCaptures.length}
+            onChange={(event) => setVisibleSelection(event.target.checked)}
+            type="checkbox"
+          />
+          <span>{selectedVisibleIds.length || visibleCaptures.length} queued</span>
+        </label>
+        <button className="label-button keep" disabled={saving || !targetIds.length} onClick={() => labelBatch(0)} type="button">
+          <Check size={16} />
+          Keep {actionScope}
+        </button>
+        <button className="label-button noise" disabled={saving || !targetIds.length} onClick={() => labelBatch(1)} type="button">
+          <X size={16} />
+          Noise {actionScope}
+        </button>
+        <button className="label-button clear" disabled={saving || !targetIds.length} onClick={() => labelBatch(null)} type="button">
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Circle size={15} />}
+          Clear {actionScope}
+        </button>
+      </div>
       <div className="space-y-3">
-        {results.map((capture) => (
+        {visibleCaptures.map((capture) => (
           <CaptureCard key={capture.id} capture={capture}>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="label-button keep" onClick={() => label(capture, 0)} type="button">
-                <Check size={16} />
-                Keep
-              </button>
-              <button className="label-button noise" onClick={() => label(capture, 1)} type="button">
-                <X size={16} />
-                Noise
-              </button>
-              <button className="label-button clear" onClick={() => label(capture, null)} type="button">
-                <Circle size={15} />
-                Clear
-              </button>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="selection-control">
+                <input
+                  checked={selectedIds.has(capture.id)}
+                  onChange={(event) => toggleSelection(capture.id, event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Select</span>
+              </label>
+              <span className="status-pill">{labelText(capture.is_noise)}</span>
             </div>
           </CaptureCard>
         ))}
-        {!results.length && <EmptyState label="No captures" />}
+        {!visibleCaptures.length && <EmptyState label="No captures" />}
       </div>
     </div>
   );
@@ -398,8 +550,8 @@ function StatsView({
   const refreshIndex = async () => {
     setRefreshing(true);
     try {
-      const response = await api.refreshIndex(config, 'tfidf');
-      onToast(`Indexed ${response.indexed_count} captures`);
+      const response = await api.refreshIndex(config, 'auto');
+      onToast(`Indexed ${response.indexed_count} captures with ${response.backend}`);
       await loadStats();
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));
@@ -653,22 +805,36 @@ function ResultList({
   config,
   query,
   results,
+  resultsLoadedAt,
   onError,
 }: {
   config: ClientConfig;
   query: string;
   results: CaptureResult[];
+  resultsLoadedAt?: number | null;
   onError: (value: string) => void;
 }) {
   const handleOpen = async (capture: CaptureResult) => {
-    if (query.trim()) {
+    const dwellMs = resultsLoadedAt ? Date.now() - resultsLoadedAt : undefined;
+    let openedByBackend = false;
+    if (capture.url || capture.file_path) {
       try {
-        await api.logClick(config, query.trim(), capture.id, capture.rank);
+        await api.openCapture(config, capture.id);
+        openedByBackend = true;
       } catch (err) {
         onError(err instanceof Error ? err.message : String(err));
       }
     }
-    openCapture(capture);
+    if (query.trim()) {
+      try {
+        await api.logClick(config, query.trim(), capture.id, capture.rank, dwellMs);
+      } catch (err) {
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    }
+    if (!openedByBackend) {
+      openCapture(capture);
+    }
   };
 
   if (!results.length) return <EmptyState label="No results" />;
@@ -685,7 +851,8 @@ function ResultList({
               </button>
             )}
             <span className="status-pill">{labelText(capture.is_noise)}</span>
-            {capture.score !== null && <span className="status-pill">Score {capture.score.toFixed(3)}</span>}
+            {capture.similarity_score !== null && <span className="status-pill">Similarity {capture.similarity_score.toFixed(3)}</span>}
+            {capture.rerank_score !== null && <span className="status-pill">Rank {capture.rerank_score.toFixed(3)}</span>}
           </div>
         </CaptureCard>
       ))}

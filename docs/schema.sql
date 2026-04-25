@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS search_clicks (
   query       TEXT NOT NULL,
   capture_id  INTEGER NOT NULL,
   rank        INTEGER,
+  dwell_ms    INTEGER,
   clicked_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(capture_id) REFERENCES captures(id)
 );

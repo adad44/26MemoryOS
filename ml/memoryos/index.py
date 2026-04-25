@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -49,6 +50,12 @@ def _try_import_faiss():
         return None
 
 
+def _dump_artifact_atomic(artifact: dict, path: Path) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    joblib.dump(artifact, tmp_path)
+    os.replace(tmp_path, path)
+
+
 def build_index(
     rows: List[sqlite3.Row],
     model_name: str = DEFAULT_EMBEDDER,
@@ -91,7 +98,7 @@ def build_index(
                 nn.fit(embeddings)
                 artifact["nearest_neighbors"] = nn
                 artifact["embeddings"] = embeddings
-            joblib.dump(artifact, INDEX_ARTIFACT_PATH)
+            _dump_artifact_atomic(artifact, INDEX_ARTIFACT_PATH)
             return INDEX_ARTIFACT_PATH
         except RuntimeError:
             if backend == "sentence":
@@ -114,7 +121,7 @@ def build_index(
         "nearest_neighbors": nn,
         "matrix": matrix,
     }
-    joblib.dump(artifact, INDEX_ARTIFACT_PATH)
+    _dump_artifact_atomic(artifact, INDEX_ARTIFACT_PATH)
     return INDEX_ARTIFACT_PATH
 
 
@@ -156,6 +163,15 @@ def search_index(
             continue
         hits.append(SearchHit(capture_id=capture_id, score=score, rank=rank, row=row))
     return hits
+
+
+def index_backend(artifact_path: Path = INDEX_ARTIFACT_PATH) -> str:
+    if not artifact_path.exists():
+        return "missing"
+    artifact = joblib.load(artifact_path)
+    if artifact.get("backend") == "sentence-transformers" and "faiss_index_path" in artifact:
+        return "faiss"
+    return str(artifact.get("backend", "unknown"))
 
 
 def format_hit(hit: SearchHit) -> str:

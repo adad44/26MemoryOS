@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
@@ -8,11 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import load_settings
 from .schemas import (
     BrowserCaptureRequest,
+    BulkNoiseLabelRequest,
+    BulkNoiseLabelResponse,
     ExportResponse,
     ForgetRequest,
     ForgetResponse,
     HealthResponse,
     NoiseLabelRequest,
+    OpenCaptureRequest,
+    OpenCaptureResponse,
     PrivacySettings,
     RecentResponse,
     RefreshRequest,
@@ -28,16 +34,19 @@ from .service import (
     forget_captures,
     get_privacy_settings,
     log_search_click,
+    open_capture,
     recent,
     refresh_index,
     save_privacy_settings,
     search,
     stats,
     update_capture_noise_label,
+    update_capture_noise_labels,
 )
 
 
 settings = load_settings()
+_index_task: Optional[asyncio.Task] = None
 
 app = FastAPI(
     title="MemoryOS Backend",
@@ -49,7 +58,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "PUT"],
     allow_headers=["Content-Type", "X-MemoryOS-API-Key"],
 )
 
@@ -62,10 +71,19 @@ def health() -> HealthResponse:
 @app.post("/search", response_model=SearchResponse, dependencies=[Depends(require_api_key)])
 def search_endpoint(request: SearchRequest) -> SearchResponse:
     try:
-        results = search(request.query, request.top_k)
+        response = search(request.query, request.top_k, request.candidate_k)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return SearchResponse(query=request.query, count=len(results), results=results)
+    results = response["results"]
+    return SearchResponse(
+        query=request.query,
+        count=len(results),
+        candidate_count=response["candidate_count"],
+        elapsed_ms=response["elapsed_ms"],
+        index_backend=response["index_backend"],
+        reranker=response["reranker"],
+        results=results,
+    )
 
 
 @app.get("/recent", response_model=RecentResponse, dependencies=[Depends(require_api_key)])
@@ -88,14 +106,14 @@ def refresh_index_endpoint(request: RefreshRequest) -> RefreshResponse:
     if request.backend not in {"auto", "sentence", "tfidf"}:
         raise HTTPException(status_code=422, detail="backend must be one of: auto, sentence, tfidf")
     try:
-        count, artifact_path = refresh_index(
+        count, artifact_path, backend_name = refresh_index(
             backend=request.backend,
             model=request.model,
             limit=request.limit,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return RefreshResponse(indexed_count=count, artifact_path=artifact_path)
+    return RefreshResponse(indexed_count=count, artifact_path=artifact_path, backend=backend_name)
 
 
 @app.post("/capture/browser", dependencies=[Depends(require_api_key)])
@@ -110,9 +128,25 @@ def capture_browser_endpoint(request: BrowserCaptureRequest) -> Response:
 
 
 @app.post("/click", dependencies=[Depends(require_api_key)])
-def click_endpoint(query: str, capture_id: int, rank: Optional[int] = None) -> Response:
-    log_search_click(query=query, capture_id=capture_id, rank=rank)
+def click_endpoint(
+    query: str,
+    capture_id: int,
+    rank: Optional[int] = None,
+    dwell_ms: Optional[int] = Query(default=None, ge=0),
+) -> Response:
+    log_search_click(query=query, capture_id=capture_id, rank=rank, dwell_ms=dwell_ms)
     return Response(status_code=204)
+
+
+@app.post("/open", response_model=OpenCaptureResponse, dependencies=[Depends(require_api_key)])
+def open_capture_endpoint(request: OpenCaptureRequest) -> OpenCaptureResponse:
+    try:
+        target = open_capture(request.capture_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not open capture: {exc}") from exc
+    return OpenCaptureResponse(opened=True, target=target)
 
 
 @app.patch("/captures/{capture_id}/noise", dependencies=[Depends(require_api_key)])
@@ -124,6 +158,15 @@ def label_capture_endpoint(capture_id: int, request: NoiseLabelRequest) -> Respo
     if not found:
         raise HTTPException(status_code=404, detail="Capture not found.")
     return Response(status_code=204)
+
+
+@app.patch("/captures/noise/bulk", response_model=BulkNoiseLabelResponse, dependencies=[Depends(require_api_key)])
+def bulk_label_capture_endpoint(request: BulkNoiseLabelRequest) -> BulkNoiseLabelResponse:
+    try:
+        updated = update_capture_noise_labels(request.capture_ids, request.is_noise)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return BulkNoiseLabelResponse(updated_count=updated)
 
 
 @app.get("/privacy", response_model=PrivacySettings, dependencies=[Depends(require_api_key)])
@@ -166,6 +209,38 @@ def run() -> None:
         port=settings.port,
         reload=False,
     )
+
+
+async def _background_index_loop() -> None:
+    interval = settings.index_interval_seconds
+    while interval > 0:
+        await asyncio.sleep(interval)
+        try:
+            refresh_index(
+                backend=settings.index_backend,
+                model=settings.index_model,
+                limit=None,
+            )
+        except Exception:
+            pass
+
+
+@app.on_event("startup")
+async def start_background_indexer() -> None:
+    global _index_task
+    if settings.index_interval_seconds > 0 and _index_task is None:
+        _index_task = asyncio.create_task(_background_index_loop())
+
+
+@app.on_event("shutdown")
+async def stop_background_indexer() -> None:
+    global _index_task
+    if _index_task is None:
+        return
+    _index_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await _index_task
+    _index_task = None
 
 
 if __name__ == "__main__":

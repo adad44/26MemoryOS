@@ -89,6 +89,8 @@ curl -X POST http://127.0.0.1:8765/search \
 
 If the index has not been built yet, this returns `409` with instructions to refresh the index.
 
+Search retrieves up to 50 candidates by default, re-ranks them with the temporal re-ranker, and returns the requested top results with index backend, candidate count, and measured latency metadata. If a trained re-ranker artifact exists, it is used; otherwise MemoryOS uses a live heuristic based on similarity, recency, and historical dwell time.
+
 ### Browser Capture
 
 The Chrome extension posts here:
@@ -113,7 +115,19 @@ Request body:
 Phase 4 will use this endpoint to collect labels for the re-ranker:
 
 ```sh
-curl -X POST "http://127.0.0.1:8765/click?query=python&capture_id=1&rank=1"
+curl -X POST "http://127.0.0.1:8765/click?query=python&capture_id=1&rank=1&dwell_ms=4200"
+```
+
+Clicks are positive labels for future re-ranker training. `dwell_ms` records how long the result was visible before the user opened it.
+
+### Open Capture
+
+Open a captured URL or file through the local macOS `open` command:
+
+```sh
+curl -X POST http://127.0.0.1:8765/open \
+  -H "Content-Type: application/json" \
+  -d '{"capture_id":1}'
 ```
 
 ### Noise Labeling
@@ -122,6 +136,14 @@ curl -X POST "http://127.0.0.1:8765/click?query=python&capture_id=1&rank=1"
 curl -X PATCH http://127.0.0.1:8765/captures/1/noise \
   -H "Content-Type: application/json" \
   -d '{"is_noise":0}'
+```
+
+Bulk label captures:
+
+```sh
+curl -X PATCH http://127.0.0.1:8765/captures/noise/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"capture_ids":[1,2,3],"is_noise":0}'
 ```
 
 ### Privacy Settings
@@ -159,6 +181,9 @@ curl -X POST http://127.0.0.1:8765/forget \
 | `MEMORYOS_API_KEY` | unset | Optional local API key |
 | `MEMORYOS_DB` | `~/Library/Application Support/MemoryOS/memoryos.db` | SQLite path |
 | `MEMORYOS_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Web UI origins |
+| `MEMORYOS_INDEX_INTERVAL_SECONDS` | `1800` | Background reindex interval while backend is running |
+| `MEMORYOS_INDEX_BACKEND` | `auto` | Background index backend |
+| `MEMORYOS_INDEX_MODEL` | unset | Optional sentence-transformer model path/name |
 
 ## Completion Notes
 

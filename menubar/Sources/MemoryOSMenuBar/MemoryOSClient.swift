@@ -1,4 +1,6 @@
 import AppKit
+import ApplicationServices
+import CoreGraphics
 import Foundation
 
 @MainActor
@@ -22,6 +24,7 @@ final class MemoryOSClient: ObservableObject {
     @Published var stats: StatsResponse?
     @Published var isRefreshingIndex = false
     @Published var capturePaused = false
+    @Published var permissions = PermissionSnapshot.current()
 
     private let session = URLSession.shared
     private let pauseFlagURL: URL
@@ -92,9 +95,42 @@ final class MemoryOSClient: ObservableObject {
         }
     }
 
+    func refreshPermissions() {
+        permissions = PermissionSnapshot.current()
+    }
+
+    func requestAccessibilityPermission() {
+        let options = [
+            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+        ] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        openPermissionPane(.accessibility)
+        refreshPermissions()
+    }
+
+    func requestScreenRecordingPermission() {
+        _ = CGRequestScreenCaptureAccess()
+        openPermissionPane(.screenRecording)
+        refreshPermissions()
+    }
+
+    func openFullDiskAccessSettings() {
+        openPermissionPane(.fullDiskAccess)
+        refreshPermissions()
+    }
+
     private func open(urlString: String) {
         guard let url = URL(string: urlString) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    private func openPermissionPane(_ pane: PermissionPane) {
+        if let url = URL(string: pane.urlString), NSWorkspace.shared.open(url) {
+            return
+        }
+        if let fallback = URL(string: "x-apple.systempreferences:com.apple.preference.security") {
+            NSWorkspace.shared.open(fallback)
+        }
     }
 
     private func request<T: Decodable>(
@@ -120,6 +156,23 @@ final class MemoryOSClient: ObservableObject {
             throw URLError(.badServerResponse)
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+}
+
+private enum PermissionPane {
+    case accessibility
+    case screenRecording
+    case fullDiskAccess
+
+    var urlString: String {
+        switch self {
+        case .accessibility:
+            return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        case .screenRecording:
+            return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+        case .fullDiskAccess:
+            return "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+        }
     }
 }
 

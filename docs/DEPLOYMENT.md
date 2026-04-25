@@ -2,6 +2,8 @@
 
 MemoryOS is local-first. The intended development deployment runs all services on the user's Mac.
 
+For a first local run, use the end-to-end [Quickstart](QUICKSTART.md).
+
 ## Local Services
 
 Backend:
@@ -40,6 +42,12 @@ Install daemon:
 scripts/install_daemon_launch_agent.sh
 ```
 
+Install backend:
+
+```sh
+scripts/install_backend_launch_agent.sh
+```
+
 Install menu bar app:
 
 ```sh
@@ -50,6 +58,7 @@ Uninstall:
 
 ```sh
 scripts/uninstall_daemon_launch_agent.sh
+scripts/uninstall_backend_launch_agent.sh
 scripts/uninstall_menubar_launch_agent.sh
 ```
 

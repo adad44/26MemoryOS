@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS search_clicks (
   query       TEXT NOT NULL,
   capture_id  INTEGER NOT NULL,
   rank        INTEGER,
+  dwell_ms    INTEGER,
   clicked_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY(capture_id) REFERENCES captures(id)
 );
@@ -56,7 +57,18 @@ def connect(path: Optional[Path] = None) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(search_clicks)").fetchall()
+    }
+    if "dwell_ms" not in columns:
+        conn.execute("ALTER TABLE search_clicks ADD COLUMN dwell_ms INTEGER")
+        conn.commit()
 
 
 def capture_count(conn: sqlite3.Connection) -> int:

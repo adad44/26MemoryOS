@@ -8,11 +8,14 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1_000)
     top_k: int = Field(default=10, ge=1, le=50)
+    candidate_k: int = Field(default=50, ge=1, le=200)
 
 
 class CaptureResult(BaseModel):
     id: int
     score: Optional[float] = None
+    similarity_score: Optional[float] = None
+    rerank_score: Optional[float] = None
     rank: Optional[int] = None
     timestamp: str
     app_name: str
@@ -28,6 +31,10 @@ class CaptureResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     count: int
+    candidate_count: int = 0
+    elapsed_ms: float = 0.0
+    index_backend: str = "unknown"
+    reranker: str = "none"
     results: List[CaptureResult]
 
 
@@ -55,6 +62,15 @@ class BrowserCaptureRequest(BaseModel):
 
 class NoiseLabelRequest(BaseModel):
     is_noise: Optional[int] = Field(default=None)
+
+
+class BulkNoiseLabelRequest(BaseModel):
+    capture_ids: List[int] = Field(min_length=1, max_length=1_000)
+    is_noise: Optional[int] = Field(default=None)
+
+
+class BulkNoiseLabelResponse(BaseModel):
+    updated_count: int
 
 
 class PrivacySettings(BaseModel):
@@ -92,6 +108,16 @@ class RefreshRequest(BaseModel):
 class RefreshResponse(BaseModel):
     indexed_count: int
     artifact_path: str
+    backend: str = "unknown"
+
+
+class OpenCaptureRequest(BaseModel):
+    capture_id: int
+
+
+class OpenCaptureResponse(BaseModel):
+    opened: bool
+    target: str
 
 
 class HealthResponse(BaseModel):

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -16,17 +18,26 @@ if str(ML_ROOT) not in sys.path:
 from memoryos.config import database_path
 from memoryos.db import CAPTURE_COLUMNS, connect, fetch_captures
 from memoryos.features import normalize_text, result_snippet
-from memoryos.index import DEFAULT_EMBEDDER, INDEX_ARTIFACT_PATH, build_index, search_index
+from memoryos.index import DEFAULT_EMBEDDER, INDEX_ARTIFACT_PATH, build_index, index_backend, search_index
+from memoryos.reranker import rerank_hits
 
 from .schemas import CaptureResult
 from .schemas import PrivacySettings
 
 
-def row_to_capture_result(row: sqlite3.Row, score: Optional[float] = None, rank: Optional[int] = None) -> CaptureResult:
+def row_to_capture_result(
+    row: sqlite3.Row,
+    score: Optional[float] = None,
+    rank: Optional[int] = None,
+    similarity_score: Optional[float] = None,
+    rerank_score: Optional[float] = None,
+) -> CaptureResult:
     content = str(row["content"] or "")
     return CaptureResult(
         id=int(row["id"]),
         score=score,
+        similarity_score=similarity_score,
+        rerank_score=rerank_score,
         rank=rank,
         timestamp=str(row["timestamp"]),
         app_name=str(row["app_name"]),
@@ -40,17 +51,35 @@ def row_to_capture_result(row: sqlite3.Row, score: Optional[float] = None, rank:
     )
 
 
-def search(query: str, top_k: int) -> list[CaptureResult]:
+def search(query: str, top_k: int, candidate_k: int = 50) -> dict:
+    started = time.perf_counter()
     if not INDEX_ARTIFACT_PATH.exists():
         raise FileNotFoundError("Search index is missing. Run /refresh-index or ml/train/build_index.py first.")
     with connect() as conn:
         rows = fetch_captures(conn, non_noise=True)
     rows_by_id = {int(row["id"]): row for row in rows}
-    hits = search_index(query, rows_by_id, top_k=top_k)
-    return [
-        row_to_capture_result(hit.row, score=hit.score, rank=hit.rank)
-        for hit in hits
-    ]
+    candidate_limit = max(top_k, candidate_k)
+    hits = search_index(query, rows_by_id, top_k=candidate_limit)
+    ranked_hits, reranker_name = rerank_hits(query, hits)
+    results = []
+    for rank, (hit, rerank_score) in enumerate(ranked_hits[:top_k], start=1):
+        results.append(
+            row_to_capture_result(
+                hit.row,
+                score=rerank_score,
+                rank=rank,
+                similarity_score=hit.score,
+                rerank_score=rerank_score,
+            )
+        )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    return {
+        "results": results,
+        "candidate_count": len(hits),
+        "elapsed_ms": round(elapsed_ms, 2),
+        "index_backend": index_backend(),
+        "reranker": reranker_name,
+    }
 
 
 def recent(limit: int, app_name: Optional[str] = None, source_type: Optional[str] = None) -> list[CaptureResult]:
@@ -146,7 +175,7 @@ def insert_browser_capture(url: Optional[str], title: Optional[str], content: st
         return int(cursor.lastrowid)
 
 
-def refresh_index(backend: str, model: Optional[str], limit: Optional[int]) -> tuple[int, str]:
+def refresh_index(backend: str, model: Optional[str], limit: Optional[int]) -> tuple[int, str, str]:
     with connect() as conn:
         rows = fetch_captures(conn, limit=limit, non_noise=True)
     artifact_path = build_index(
@@ -154,16 +183,33 @@ def refresh_index(backend: str, model: Optional[str], limit: Optional[int]) -> t
         model_name=model or DEFAULT_EMBEDDER,
         backend=backend,
     )
-    return len(rows), str(artifact_path)
+    return len(rows), str(artifact_path), index_backend()
 
 
-def log_search_click(query: str, capture_id: int, rank: Optional[int]) -> None:
+def log_search_click(query: str, capture_id: int, rank: Optional[int], dwell_ms: Optional[int] = None) -> None:
     with connect() as conn:
         conn.execute(
-            "INSERT INTO search_clicks (query, capture_id, rank) VALUES (?, ?, ?)",
-            (query, capture_id, rank),
+            "INSERT INTO search_clicks (query, capture_id, rank, dwell_ms) VALUES (?, ?, ?, ?)",
+            (query, capture_id, rank, dwell_ms),
         )
         conn.commit()
+
+
+def open_capture(capture_id: int) -> str:
+    with connect() as conn:
+        row = conn.execute(
+            f"SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?",
+            (capture_id,),
+        ).fetchone()
+    if row is None:
+        raise ValueError("Capture not found.")
+
+    target = row["url"] or row["file_path"]
+    if not target:
+        raise ValueError("Capture has no URL or file path to open.")
+
+    subprocess.run(["open", str(target)], check=True)
+    return str(target)
 
 
 def update_capture_noise_label(capture_id: int, is_noise: Optional[int]) -> bool:
@@ -176,6 +222,22 @@ def update_capture_noise_label(capture_id: int, is_noise: Optional[int]) -> bool
         )
         conn.commit()
         return cursor.rowcount > 0
+
+
+def update_capture_noise_labels(capture_ids: list[int], is_noise: Optional[int]) -> int:
+    if is_noise not in (None, 0, 1):
+        raise ValueError("is_noise must be null, 0, or 1.")
+    unique_ids = sorted({int(capture_id) for capture_id in capture_ids})
+    if not unique_ids:
+        return 0
+    placeholders = ",".join("?" for _ in unique_ids)
+    with connect() as conn:
+        cursor = conn.execute(
+            f"UPDATE captures SET is_noise = ? WHERE id IN ({placeholders})",
+            [is_noise, *unique_ids],
+        )
+        conn.commit()
+        return int(cursor.rowcount)
 
 
 def _privacy_path():

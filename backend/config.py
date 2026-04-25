@@ -15,6 +15,9 @@ class BackendSettings:
     port: int
     api_key: Optional[str]
     cors_origins: tuple[str, ...]
+    index_interval_seconds: int
+    index_backend: str
+    index_model: Optional[str]
 
     @property
     def api_key_enabled(self) -> bool:
@@ -31,4 +34,7 @@ def load_settings() -> BackendSettings:
         port=int(os.environ.get("MEMORYOS_PORT", "8765")),
         api_key=os.environ.get("MEMORYOS_API_KEY"),
         cors_origins=tuple(origin.strip() for origin in origins.split(",") if origin.strip()),
+        index_interval_seconds=int(os.environ.get("MEMORYOS_INDEX_INTERVAL_SECONDS", "1800")),
+        index_backend=os.environ.get("MEMORYOS_INDEX_BACKEND", "auto"),
+        index_model=os.environ.get("MEMORYOS_INDEX_MODEL"),
     )

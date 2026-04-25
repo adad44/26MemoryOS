@@ -12,6 +12,8 @@ swiftc \
   "$ROOT"/menubar/Sources/MemoryOSMenuBar/*.swift \
   -o "$BUILD_DIR/memoryos-menubar" \
   -framework AppKit \
+  -framework ApplicationServices \
+  -framework CoreGraphics \
   -framework SwiftUI
 
 rm -rf "$APP_DIR"
@@ -40,6 +42,12 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
   <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>MemoryOS watches Desktop files you edit so they can be searched locally.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>MemoryOS watches Documents files you edit so they can be searched locally.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>MemoryOS watches Downloads files you edit so they can be searched locally.</string>
 </dict>
 </plist>
 PLIST
