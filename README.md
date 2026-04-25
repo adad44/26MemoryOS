@@ -29,7 +29,7 @@ One-command macOS install from the repo root:
 scripts/install_memoryos.sh
 ```
 
-That command creates the Python virtual environment, installs backend and web dependencies, builds the React UI, installs/starts Ollama, pulls the local `mistral` model if needed, builds the Swift daemon/menu bar app, registers launch agents, and starts MemoryOS on login.
+That command creates the Python virtual environment, installs backend and web dependencies, builds the React UI, installs/starts Ollama, pulls the local `mistral` model if needed, builds the Swift daemon/menu bar app, registers launch agents, starts MemoryOS on login, and opens the web UI.
 
 The default install uses the lightweight TF-IDF search runtime. Install the heavier sentence-transformer/FAISS extras only if you want embedding search or model training:
 
@@ -141,6 +141,12 @@ MEMORYOS_DB=/tmp/memoryos.db scripts/run_backend.sh
 ```
 
 The prototype is unsigned. The menu bar app includes local permission onboarding for Accessibility, Full Disk Access review, and Screen Recording fallback setup. If you distribute it outside local development, you should add app signing and notarization.
+
+### Optional API Key
+
+The blank API key field in the web UI and menu bar app is for users who start the backend with `MEMORYOS_API_KEY`.
+
+Most local users should leave it blank. It is only needed when someone deliberately protects the local backend, for example a developer, tester, or power user running MemoryOS on a shared machine, through a tunnel, or inside another agent/tool workflow. When enabled, clients send the value as the `X-MemoryOS-API-Key` header.
 
 ## Project Structure
 

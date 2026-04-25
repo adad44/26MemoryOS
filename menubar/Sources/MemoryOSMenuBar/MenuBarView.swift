@@ -175,10 +175,10 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
             TextField("Web URL", text: $client.webURL)
                 .textFieldStyle(.roundedBorder)
-            Text("API Key")
+            Text("API Key (optional)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            SecureField("Optional", text: $client.apiKey)
+            SecureField("Only if backend requires one", text: $client.apiKey)
                 .textFieldStyle(.roundedBorder)
         }
     }

@@ -10,6 +10,7 @@ INSTALL_WEB=1
 INSTALL_LAUNCH_AGENTS=1
 INSTALL_SCHEDULER=1
 INSTALL_EMBEDDINGS=0
+OPEN_WEB_UI=1
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
@@ -27,6 +28,7 @@ Options:
   --skip-web          Do not install/build/start the React web UI.
   --no-launch-agents  Install dependencies only; do not register services.
   --no-scheduler      Do not install the 6-hour Phase 7 abstraction scheduler.
+  --no-open           Do not open the web UI after install.
   --with-embeddings   Install Torch, sentence-transformers, and FAISS extras.
   --model NAME        Ollama model to pull/use. Default: mistral.
   -h, --help          Show this help.
@@ -188,6 +190,10 @@ while [[ $# -gt 0 ]]; do
       INSTALL_SCHEDULER=0
       shift
       ;;
+    --no-open)
+      OPEN_WEB_UI=0
+      shift
+      ;;
     --with-embeddings)
       INSTALL_EMBEDDINGS=1
       shift
@@ -304,6 +310,9 @@ if (( INSTALL_LAUNCH_AGENTS == 1 )); then
   if (( INSTALL_WEB == 1 )); then
     launchctl print "gui/$UID/com.memoryos.web" >/dev/null 2>&1 || warn "Web launch agent is not loaded."
     wait_for_url "Web UI" "http://127.0.0.1:5173" || true
+    if (( OPEN_WEB_UI == 1 )); then
+      open "http://127.0.0.1:5173" >/dev/null 2>&1 || warn "Could not open the web UI automatically."
+    fi
   fi
   if (( INSTALL_NATIVE == 1 )); then
     launchctl print "gui/$UID/com.memoryos.daemon" >/dev/null 2>&1 || warn "Daemon launch agent is not loaded."

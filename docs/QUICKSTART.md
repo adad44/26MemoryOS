@@ -25,6 +25,7 @@ The installer handles the normal local setup:
 - Pulls the local `mistral` model if it is missing.
 - Builds the Swift daemon and menu bar app.
 - Registers launch agents for the backend, web UI, daemon, menu bar app, and Phase 7 scheduler.
+- Opens the web UI in the browser when the install finishes.
 
 Expected local URLs after install:
 
@@ -45,6 +46,7 @@ Useful installer flags:
 scripts/install_memoryos.sh --skip-native       # backend/web only
 scripts/install_memoryos.sh --skip-ollama       # no local LLM setup
 scripts/install_memoryos.sh --no-launch-agents  # install dependencies only
+scripts/install_memoryos.sh --no-open           # do not open browser after install
 scripts/install_memoryos.sh --with-embeddings   # add Torch, sentence-transformers, FAISS
 scripts/install_memoryos.sh --model llama3.2    # use a different Ollama model
 ```
@@ -380,6 +382,13 @@ MEMORYOS_PORT=8766 scripts/run_backend.sh
 ```
 
 Then set the web UI backend URL to `http://127.0.0.1:8766` in Settings.
+
+API key field is blank:
+
+- That is normal for the default local setup.
+- Leave it blank unless you started the backend with `MEMORYOS_API_KEY=...`.
+- The field is for users who intentionally protect the local backend, such as developers, testers, or people exposing MemoryOS to another local agent/tool workflow.
+- When used, the value is sent as the `X-MemoryOS-API-Key` header.
 
 Web UI port is already in use:
 
