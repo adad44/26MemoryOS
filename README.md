@@ -51,29 +51,9 @@ For a tab-by-tab explanation of the web app, see:
 
 [docs/WEB_UI_GUIDE.md](docs/WEB_UI_GUIDE.md)
 
-Manual backend path if you already know the tooling:
+Advanced manual setup is kept in [docs/QUICKSTART.md](docs/QUICKSTART.md) for debugging only. New users should start with the installer, not separate backend and web terminals.
 
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r backend/requirements.txt
-scripts/run_backend.sh
-```
-
-In a second terminal:
-
-```sh
-cd web
-npm install
-npm run dev
-```
-
-Open the web UI:
-
-```text
-http://127.0.0.1:5173
-```
+The installer file is [scripts/install_memoryos.sh](scripts/install_memoryos.sh).
 
 ## Use It With An AI Coding Agent
 
@@ -82,30 +62,31 @@ If you use Codex, Claude Code, Cursor, or another coding agent, point the agent 
 Copy this prompt:
 
 ```text
-You are in the MemoryOS repository. Read README.md and docs/QUICKSTART.md, then run MemoryOS locally. Install the needed Python and Node dependencies, start the FastAPI backend, start the React web UI, add one test capture, build a TF-IDF index, verify search works, and tell me the local URLs. Do not delete local data unless I explicitly ask.
+You are in the MemoryOS repository. Run scripts/install_memoryos.sh, then verify http://127.0.0.1:8765/health and http://127.0.0.1:5173. Do not delete local data unless I explicitly ask.
 ```
 
 If the agent is not already inside the repo, give it the path first:
 
 ```text
-Go to /path/to/memoryos, read README.md and docs/QUICKSTART.md, then run the local MemoryOS quickstart.
+Go to /path/to/memoryos and run scripts/install_memoryos.sh.
 ```
 
 For this local checkout, the path is usually the folder that contains this README.
 
 ## Everyday Workflow
 
-1. Start the backend with `scripts/run_backend.sh`.
-2. Start the web UI with `cd web && npm run dev`.
-3. Add captures through the Chrome extension, the macOS daemon, or a test API call.
-4. Open the Stats tab and click Reindex.
-5. Search from the Search tab.
-6. Pin high-value results from Search.
-7. Review Collections and Digest to see what MemoryOS thinks matters.
-8. Add follow-ups in Todo.
-9. Open You to inspect the local user model when Ollama is running.
-10. Use the Label tab to batch-mark visible captures as Keep or Noise.
-11. Use Settings to manage privacy lists, storage policy, export JSON, or delete filtered captures.
+1. Run `scripts/install_memoryos.sh` once.
+2. Open the web UI at `http://127.0.0.1:5173`.
+3. Grant macOS permissions from the menu bar app when prompted.
+4. Add captures through the Chrome extension, the macOS daemon, or a test API call.
+5. Open the Stats tab and click Reindex.
+6. Search from the Search tab.
+7. Pin high-value results from Search.
+8. Review Collections and Digest to see what MemoryOS thinks matters.
+9. Add follow-ups in Todo.
+10. Open You to inspect the local user model.
+11. Use the Label tab to batch-mark visible captures as Keep or Noise.
+12. Use Settings to manage privacy lists, storage policy, export JSON, or delete filtered captures.
 
 ## Storage Management
 
