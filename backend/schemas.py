@@ -51,6 +51,8 @@ class StatsResponse(BaseModel):
     counts_by_source_type: List[Dict[str, Any]]
     noise_counts: List[Dict[str, Any]]
     latest_capture_at: Optional[str]
+    storage_bytes: Optional[int] = None
+    protected_captures: Optional[int] = None
 
 
 class BrowserCaptureRequest(BaseModel):
@@ -77,6 +79,54 @@ class PrivacySettings(BaseModel):
     blocked_apps: List[str] = []
     blocked_domains: List[str] = []
     excluded_path_fragments: List[str] = []
+
+
+class StoragePolicy(BaseModel):
+    mode: str = "balanced"
+    auto_noise_enabled: bool = True
+    min_text_chars: int = Field(default=180, ge=20, le=2_000)
+    retention_days: int = Field(default=30, ge=1, le=3650)
+    noise_retention_hours: int = Field(default=24, ge=1, le=8760)
+    max_database_mb: int = Field(default=1024, ge=10, le=100_000)
+    keep_clicked: bool = True
+    protect_keep_labels: bool = True
+    noise_apps: List[str] = []
+    noise_domains: List[str] = []
+
+
+class StorageStatsResponse(BaseModel):
+    database_bytes: int
+    index_bytes: int
+    log_bytes: int
+    total_bytes: int
+    total_captures: int
+    noise_captures: int
+    keep_captures: int
+    protected_captures: int
+    oldest_capture_at: Optional[str]
+    latest_capture_at: Optional[str]
+    policy: StoragePolicy
+
+
+class CleanupRequest(BaseModel):
+    delete_noise: bool = True
+    delete_duplicates: bool = True
+    apply_retention: bool = True
+    enforce_size_cap: bool = True
+    rotate_logs: bool = True
+    rebuild_index: bool = False
+    confirm: bool = False
+
+
+class CleanupResponse(BaseModel):
+    deleted_noise: int
+    deleted_old: int
+    deleted_duplicates: int
+    deleted_for_size: int
+    logs_rotated: int
+    index_removed: bool
+    index_rebuilt: bool
+    reclaimed_hint_bytes: int
 
 
 class ForgetRequest(BaseModel):

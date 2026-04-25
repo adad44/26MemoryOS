@@ -9,7 +9,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f2f4f6;
+  background: #eef2f4;
 }
 
 button,
@@ -26,6 +26,57 @@ select:focus-visible {
 }
 
 @layer components {
+  .app-header {
+    @apply border-b border-line bg-white/95;
+  }
+
+  .brain-logo {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center border border-ink bg-ink text-white;
+    box-shadow: inset 0 -8px 0 rgb(255 255 255 / 0.08);
+  }
+
+  .brain-logo-large {
+    @apply h-16 w-16;
+  }
+
+  .home-hero {
+    @apply grid gap-5 border border-line bg-white p-5 lg:grid-cols-[1fr_220px] lg:items-center;
+  }
+
+  .home-actions {
+    @apply grid gap-2 sm:grid-cols-3 lg:grid-cols-1;
+  }
+
+  .home-metric {
+    @apply min-w-0 border p-3;
+  }
+
+  .home-metric svg {
+    @apply shrink-0;
+  }
+
+  .home-metric-ready,
+  .home-metric-safe {
+    @apply border-moss/30 bg-[#f2fbf7] text-moss;
+  }
+
+  .home-metric-checking,
+  .home-metric-warm {
+    @apply border-signal/30 bg-[#fff8e8] text-signal;
+  }
+
+  .home-metric-offline {
+    @apply border-rust/30 bg-[#fff7f3] text-rust;
+  }
+
+  .home-metric-neutral {
+    @apply border-line bg-panel text-ink;
+  }
+
+  .home-link {
+    @apply inline-flex h-11 items-center justify-start gap-2 border border-line bg-white px-3 text-sm font-medium text-ink transition hover:bg-panel;
+  }
+
   .nav-tab {
     @apply flex h-10 min-w-0 items-center justify-center gap-2 border border-transparent px-2 text-sm text-slate-600 transition hover:bg-panel lg:justify-start lg:px-3;
   }
@@ -91,7 +142,7 @@ select:focus-visible {
   }
 
   .label-button {
-    @apply inline-flex h-9 items-center gap-2 border px-3 text-sm font-medium transition;
+    @apply inline-flex h-9 items-center gap-2 border px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .label-button.keep {
@@ -112,5 +163,13 @@ select:focus-visible {
 
   .surface-title {
     @apply text-sm font-semibold text-ink;
+  }
+
+  .selection-control {
+    @apply inline-flex h-9 items-center gap-2 border border-line bg-white px-3 text-sm font-medium text-slate-700;
+  }
+
+  .selection-control input {
+    @apply h-4 w-4 accent-[#246b8f];
   }
 }

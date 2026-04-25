@@ -60,6 +60,9 @@ http://127.0.0.1:5173
 - Optional API key.
 - Backend health check.
 - Privacy blocklists.
+- Storage dashboard with database, index, log, and total usage.
+- Retention mode, noise rules, database cap, and protected-capture controls.
+- One-click cleanup and cleanup-plus-reindex actions.
 - JSON export.
 - Filtered forget/delete controls.
 

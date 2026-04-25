@@ -38,6 +38,8 @@ export type StatsResponse = {
   counts_by_source_type: Array<{ source_type: string; count: number }>;
   noise_counts: Array<{ is_noise: number | null; count: number }>;
   latest_capture_at: string | null;
+  storage_bytes: number | null;
+  protected_captures: number | null;
 };
 
 export type HealthResponse = {
@@ -49,6 +51,44 @@ export type PrivacySettings = {
   blocked_apps: string[];
   blocked_domains: string[];
   excluded_path_fragments: string[];
+};
+
+export type StoragePolicy = {
+  mode: string;
+  auto_noise_enabled: boolean;
+  min_text_chars: number;
+  retention_days: number;
+  noise_retention_hours: number;
+  max_database_mb: number;
+  keep_clicked: boolean;
+  protect_keep_labels: boolean;
+  noise_apps: string[];
+  noise_domains: string[];
+};
+
+export type StorageStats = {
+  database_bytes: number;
+  index_bytes: number;
+  log_bytes: number;
+  total_bytes: number;
+  total_captures: number;
+  noise_captures: number;
+  keep_captures: number;
+  protected_captures: number;
+  oldest_capture_at: string | null;
+  latest_capture_at: string | null;
+  policy: StoragePolicy;
+};
+
+export type CleanupResponse = {
+  deleted_noise: number;
+  deleted_old: number;
+  deleted_duplicates: number;
+  deleted_for_size: number;
+  logs_rotated: number;
+  index_removed: boolean;
+  index_rebuilt: boolean;
+  reclaimed_hint_bytes: number;
 };
 
 export type ClientConfig = {
@@ -139,6 +179,26 @@ export const api = {
     request<PrivacySettings>(config, '/privacy', {
       method: 'PUT',
       body: JSON.stringify(settings),
+    }),
+  storage: (config: ClientConfig) => request<StorageStats>(config, '/storage'),
+  storagePolicy: (config: ClientConfig) => request<StoragePolicy>(config, '/storage-policy'),
+  saveStoragePolicy: (config: ClientConfig, policy: StoragePolicy) =>
+    request<StoragePolicy>(config, '/storage-policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    }),
+  cleanup: (config: ClientConfig, rebuildIndex = false) =>
+    request<CleanupResponse>(config, '/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({
+        delete_noise: true,
+        delete_duplicates: true,
+        apply_retention: true,
+        enforce_size_cap: true,
+        rotate_logs: true,
+        rebuild_index: rebuildIndex,
+        confirm: true,
+      }),
     }),
   exportData: (config: ClientConfig) => request<unknown>(config, '/export'),
   forget: (

@@ -1,5 +1,6 @@
-const MEMORYOS_MIN_PAGE_SECONDS = 10;
+const MEMORYOS_MIN_PAGE_SECONDS = 45;
 const MEMORYOS_MAX_CHARS = 3000;
+const MEMORYOS_MIN_CHARS = 180;
 
 function visibleText() {
   return (document.body?.innerText || "")
@@ -19,7 +20,11 @@ function shouldSkip() {
     "wellsfargo.com",
     "capitalone.com",
     "paypal.com",
-    "venmo.com"
+    "venmo.com",
+    "netflix.com",
+    "spotify.com",
+    "tiktok.com",
+    "instagram.com"
   ].some((fragment) => host.includes(fragment));
 }
 
@@ -27,7 +32,7 @@ setTimeout(() => {
   if (shouldSkip()) return;
 
   const content = visibleText();
-  if (content.length < 100) return;
+  if (content.length < MEMORYOS_MIN_CHARS) return;
 
   chrome.runtime.sendMessage({
     type: "page_capture",

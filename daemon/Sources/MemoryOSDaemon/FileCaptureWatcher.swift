@@ -71,7 +71,7 @@ final class FileCaptureWatcher {
         }
         recentlyCaptured[path] = now
 
-        guard let content = readContent(from: url), content.count >= 20 else { return }
+        guard let content = readContent(from: url), content.count >= config.minCaptureCharacters else { return }
         database.insertCapture(CaptureRecord(
             timestamp: now,
             appName: "File System",

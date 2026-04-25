@@ -3,7 +3,7 @@
 This folder now contains the first-pass data capture layer:
 
 - `daemon/`: Swift Package executable for local macOS capture.
-- `extension/`: Chrome Manifest V3 extension that captures page title, URL, and visible text after 10 seconds.
+- `extension/`: Chrome Manifest V3 extension that captures page title, URL, and visible text after 45 seconds.
 - `scripts/browser_ingest_server.py`: local browser capture endpoint that writes to the same SQLite database.
 
 ## Run the Swift daemon

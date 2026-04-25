@@ -4,9 +4,11 @@ struct MemoryOSConfig {
     let databasePath: String
     let pollIntervalSeconds: TimeInterval
     let maxFileCharacters: Int
+    let minCaptureCharacters: Int
     let watchedDirectories: [String]
     let allowedFileExtensions: Set<String>
     let blockedApps: Set<String>
+    let noiseApps: Set<String>
     let ignoredHostFragments: [String]
     let excludedPathFragments: [String]
     let pauseFlagPath: String
@@ -37,6 +39,7 @@ struct MemoryOSConfig {
                 ?? "\(dataDir)/memoryos.db",
             pollIntervalSeconds: 8,
             maxFileCharacters: 2_000,
+            minCaptureCharacters: 180,
             watchedDirectories: [
                 "\(home)/Documents",
                 "\(home)/Desktop",
@@ -47,6 +50,9 @@ struct MemoryOSConfig {
                 "json", "yaml", "yml", "html", "css", "csv"
             ],
             blockedApps: defaultBlockedApps.union(privacy?.blockedApps ?? []),
+            noiseApps: [
+                "Netflix", "Spotify", "TV", "Music", "Steam", "Games"
+            ],
             ignoredHostFragments: defaultIgnoredHosts + (privacy?.blockedDomains ?? []),
             excludedPathFragments: defaultExcludedPaths + (privacy?.excludedPathFragments ?? []),
             pauseFlagPath: "\(dataDir)/capture.paused"

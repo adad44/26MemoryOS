@@ -35,6 +35,8 @@ final class WindowCapturePoller {
             return
         }
         guard let snapshot = extractor.captureFrontmostWindow() else { return }
+        guard snapshot.content.count >= config.minCaptureCharacters else { return }
+        guard !isNoisy(snapshot) else { return }
 
         let digest = TextDigest.stable([
             snapshot.appName,
@@ -54,5 +56,15 @@ final class WindowCapturePoller {
             url: nil,
             filePath: nil
         ))
+    }
+
+    private func isNoisy(_ snapshot: AccessibilityWindowSnapshot) -> Bool {
+        let joined = [
+            snapshot.appName,
+            snapshot.windowTitle ?? ""
+        ].joined(separator: " ").lowercased()
+        return config.noiseApps.contains { app in
+            joined.contains(app.lowercased())
+        }
     }
 }

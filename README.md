@@ -19,12 +19,17 @@ The short version: run MemoryOS locally, collect a small amount of context, buil
 - Swift macOS daemon for native window/file context capture.
 - Swift menu bar app for status, opening the UI, refreshing the index, and pausing capture.
 - TF-IDF search that works immediately, plus hooks for sentence-transformer and FAISS indexing.
+- Storage controls for retention, auto-noise rules, cleanup, and protected useful captures.
 
 ## Quick Start
 
 The full beginner-friendly setup guide is here:
 
 [docs/QUICKSTART.md](docs/QUICKSTART.md)
+
+For a tab-by-tab explanation of the web app, see:
+
+[docs/WEB_UI_GUIDE.md](docs/WEB_UI_GUIDE.md)
 
 Fast path if you already know the tooling:
 
@@ -76,7 +81,18 @@ For this local checkout, the path is usually the folder that contains this READM
 4. Open the Stats tab and click Reindex.
 5. Search from the Search tab.
 6. Use the Label tab to batch-mark visible captures as Keep or Noise.
-7. Use Settings to manage privacy lists, export JSON, or delete filtered captures.
+7. Use Settings to manage privacy lists, storage policy, export JSON, or delete filtered captures.
+
+## Storage Management
+
+MemoryOS is local-first, so storage matters. The web Settings tab includes a Storage panel with:
+
+- Database, index, log, and total disk usage.
+- Retention modes: Light, Balanced, Deep memory, and Archive.
+- Automatic cleanup for noise, old unprotected captures, exact duplicates, large databases, and oversized logs.
+- Protected captures: clicked search results and user-marked Keep rows are preserved by default.
+
+The default Balanced policy keeps useful captures for 30 days, deletes noise after 24 hours, protects clicked/kept memories, and caps the database at 1 GB.
 
 ## Privacy Model
 
@@ -186,6 +202,7 @@ Remaining real-world work includes training production models on real labeled da
 ## More Documentation
 
 - [Quickstart](docs/QUICKSTART.md)
+- [Web UI guide](docs/WEB_UI_GUIDE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Demo script](docs/DEMO_SCRIPT.md)

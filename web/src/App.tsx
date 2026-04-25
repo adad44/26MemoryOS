@@ -1,30 +1,35 @@
 import {
   Activity,
   BarChart3,
+  BrainCircuit,
   Check,
+  Clock3,
   Circle,
   Database,
   ExternalLink,
   FileText,
   Filter,
+  Gauge,
   HardDrive,
   Loader2,
   RefreshCw,
   Search,
   Settings,
   Shield,
+  ShieldCheck,
   Tag,
   X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { api, CaptureResult, ClientConfig, PrivacySettings, SearchResponse, StatsResponse } from './api';
+import { api, CaptureResult, ClientConfig, PrivacySettings, SearchResponse, StatsResponse, StoragePolicy, StorageStats } from './api';
 
-type Tab = 'search' | 'recent' | 'label' | 'stats' | 'settings';
+type Tab = 'home' | 'search' | 'recent' | 'label' | 'stats' | 'settings';
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8765';
 
 const tabs: Array<{ id: Tab; label: string; icon: typeof Search }> = [
+  { id: 'home', label: 'Home', icon: BrainCircuit },
   { id: 'search', label: 'Search', icon: Search },
   { id: 'recent', label: 'Recent', icon: FileText },
   { id: 'label', label: 'Label', icon: Tag },
@@ -54,6 +59,18 @@ function formatTime(value: string | null) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
+}
+
+function formatBytes(value: number | null | undefined) {
+  if (!value) return '0 MB';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let amount = value;
+  let index = 0;
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024;
+    index += 1;
+  }
+  return `${amount.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 function relativeTime(value: string | null) {
@@ -100,7 +117,7 @@ function labelText(value: number | null) {
 
 export function App() {
   const [config, setConfig] = useState<ClientConfig>(loadConfig);
-  const [tab, setTab] = useState<Tab>('search');
+  const [tab, setTab] = useState<Tab>('home');
   const [health, setHealth] = useState<'online' | 'offline' | 'checking'>('checking');
   const [healthKey, setHealthKey] = useState(false);
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -142,11 +159,11 @@ export function App() {
 
   return (
     <main className="min-h-screen bg-[#f2f4f6] text-ink">
-      <header className="border-b border-line bg-white">
+      <header className="app-header">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-ink text-white">
-              <Database size={20} />
+            <div className="brain-logo">
+              <BrainCircuit size={24} />
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-normal">MemoryOS</h1>
@@ -171,7 +188,7 @@ export function App() {
 
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[220px_1fr]">
         <nav className="h-fit border-b border-line bg-white p-2 lg:sticky lg:top-4 lg:border">
-          <div className="grid grid-cols-5 gap-1 lg:grid-cols-1">
+          <div className="grid grid-cols-3 gap-1 sm:grid-cols-6 lg:grid-cols-1">
             {tabs.map((item) => {
               const Icon = item.icon;
               return (
@@ -207,6 +224,17 @@ export function App() {
             </div>
           )}
 
+          {tab === 'home' && (
+            <HomeView
+              health={health}
+              stats={stats}
+              onNavigate={setTab}
+              onRefresh={() => {
+                void checkHealth();
+                void loadStats();
+              }}
+            />
+          )}
           {tab === 'search' && <SearchView config={config} onError={setError} />}
           {tab === 'recent' && <RecentView config={config} onError={setError} />}
           {tab === 'label' && <LabelView config={config} onError={setError} onToast={setToast} />}
@@ -226,6 +254,127 @@ export function App() {
         </section>
       </div>
     </main>
+  );
+}
+
+function HomeView({
+  health,
+  stats,
+  onNavigate,
+  onRefresh,
+}: {
+  health: 'online' | 'offline' | 'checking';
+  stats: StatsResponse | null;
+  onNavigate: (tab: Tab) => void;
+  onRefresh: () => void;
+}) {
+  const keepCount = stats?.noise_counts.find((item) => item.is_noise === 0)?.count || 0;
+  const noiseCount = stats?.noise_counts.find((item) => item.is_noise === 1)?.count || 0;
+  const unlabeledCount = stats?.noise_counts.find((item) => item.is_noise === null)?.count || 0;
+  const statusTone = health === 'online' ? 'ready' : health === 'checking' ? 'checking' : 'offline';
+
+  return (
+    <div className="space-y-4">
+      <section className="home-hero">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="brain-logo brain-logo-large">
+              <BrainCircuit size={36} />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-slate-600">Local memory console</div>
+              <h2 className="text-3xl font-semibold tracking-normal text-ink">MemoryOS</h2>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <HomeMetric label="Backend" value={health} icon={Gauge} tone={statusTone} />
+            <HomeMetric label="Captures" value={stats?.total_captures ?? 0} icon={Database} tone="neutral" />
+            <HomeMetric label="Protected" value={stats?.protected_captures ?? 0} icon={ShieldCheck} tone="safe" />
+            <HomeMetric label="Storage" value={formatBytes(stats?.storage_bytes)} icon={HardDrive} tone="warm" />
+          </div>
+        </div>
+        <div className="home-actions">
+          <button className="command-button primary" onClick={() => onNavigate('search')} type="button">
+            <Search size={16} />
+            Search Memory
+          </button>
+          <button className="command-button" onClick={() => onNavigate('recent')} type="button">
+            <Clock3 size={16} />
+            Recent
+          </button>
+          <button className="command-button" onClick={onRefresh} type="button">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="surface">
+          <div className="surface-title">Today</div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <Badge label="Keep" value={keepCount} />
+            <Badge label="Noise" value={noiseCount} />
+            <Badge label="Unlabeled" value={unlabeledCount} />
+          </div>
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            <button className="home-link" onClick={() => onNavigate('label')} type="button">
+              <Check size={17} />
+              Review labels
+            </button>
+            <button className="home-link" onClick={() => onNavigate('stats')} type="button">
+              <BarChart3 size={17} />
+              View stats
+            </button>
+            <button className="home-link" onClick={() => onNavigate('settings')} type="button">
+              <Shield size={17} />
+              Storage policy
+            </button>
+          </div>
+        </section>
+
+        <section className="surface">
+          <div className="surface-title">System</div>
+          <div className="mt-4 space-y-3 text-sm text-slate-700">
+            <SystemRow label="Index" value={stats?.indexed_available ? 'Ready' : 'Missing'} />
+            <SystemRow label="Latest" value={relativeTime(stats?.latest_capture_at || null)} />
+            <SystemRow label="Disk" value={formatBytes(stats?.storage_bytes)} />
+            <SystemRow label="Protected" value={`${stats?.protected_captures ?? 0} captures`} />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function HomeMetric({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  icon: typeof Database;
+  tone: 'ready' | 'checking' | 'offline' | 'neutral' | 'safe' | 'warm';
+}) {
+  return (
+    <div className={`home-metric home-metric-${tone}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-slate-600">{label}</span>
+        <Icon size={18} />
+      </div>
+      <div className="mt-3 truncate text-2xl font-semibold capitalize">{value}</div>
+    </div>
+  );
+}
+
+function SystemRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-line pb-2 last:border-b-0 last:pb-0">
+      <span className="text-slate-500">{label}</span>
+      <span className="truncate font-medium text-ink">{value}</span>
+    </div>
   );
 }
 
@@ -584,7 +733,7 @@ function StatsView({
         <Metric label="Captures" value={stats?.total_captures ?? 0} icon={Database} />
         <Metric label="Indexed" value={stats?.indexed_available ? 'Yes' : 'No'} icon={Activity} />
         <Metric label="Keep" value={keepCount} icon={Check} />
-        <Metric label="Noise" value={noiseCount} icon={X} />
+        <Metric label="Storage" value={formatBytes(stats?.storage_bytes)} icon={HardDrive} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Breakdown title="Apps" rows={stats?.counts_by_app || []} labelKey="app_name" />
@@ -598,6 +747,7 @@ function StatsView({
             <Badge label="Noise" value={noiseCount} />
             <Badge label="Unlabeled" value={unlabeledCount} />
           </div>
+          <div className="mt-2 text-sm text-slate-600">Protected: {stats?.protected_captures ?? 0}</div>
         </div>
         <div className="surface">
           <div className="surface-title">Database</div>
@@ -629,6 +779,19 @@ function SettingsView({
     blocked_domains: [],
     excluded_path_fragments: [],
   });
+  const [storage, setStorage] = useState<StorageStats | null>(null);
+  const [policy, setPolicy] = useState<StoragePolicy>({
+    mode: 'balanced',
+    auto_noise_enabled: true,
+    min_text_chars: 180,
+    retention_days: 30,
+    noise_retention_hours: 24,
+    max_database_mb: 1024,
+    keep_clicked: true,
+    protect_keep_labels: true,
+    noise_apps: [],
+    noise_domains: [],
+  });
   const [forgetHours, setForgetHours] = useState('24');
   const [forgetSource, setForgetSource] = useState('');
 
@@ -641,14 +804,51 @@ function SettingsView({
     }
   };
 
+  const loadStorage = async () => {
+    try {
+      const response = await api.storage(config);
+      setStorage(response);
+      setPolicy(response.policy);
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   useEffect(() => {
     void loadPrivacy();
+    void loadStorage();
   }, [config.baseUrl, config.apiKey]);
 
   const savePrivacy = async () => {
     try {
       await api.savePrivacy(config, privacy);
       onToast('Privacy settings saved');
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const saveStorage = async () => {
+    try {
+      const saved = await api.saveStoragePolicy(config, policy);
+      setPolicy(saved);
+      await loadStorage();
+      onToast('Storage policy saved');
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const cleanupStorage = async (rebuildIndex = false) => {
+    try {
+      const result = await api.cleanup(config, rebuildIndex);
+      await loadStorage();
+      onToast(
+        `Deleted ${result.deleted_noise + result.deleted_old + result.deleted_duplicates + result.deleted_for_size} captures`,
+      );
       onError('');
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));
@@ -692,6 +892,16 @@ function SettingsView({
   const updateList = (key: keyof PrivacySettings, value: string) => {
     setPrivacy({
       ...privacy,
+      [key]: value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+  };
+
+  const updatePolicyList = (key: 'noise_apps' | 'noise_domains', value: string) => {
+    setPolicy({
+      ...policy,
       [key]: value
         .split('\n')
         .map((item) => item.trim())
@@ -767,6 +977,132 @@ function SettingsView({
           <button className="command-button" onClick={loadPrivacy} type="button">
             <RefreshCw size={16} />
             Reload
+          </button>
+        </div>
+      </div>
+      <div className="surface">
+        <div className="surface-title">Storage</div>
+        <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <Badge label="Total" value={storage?.total_captures ?? 0} />
+          <Badge label="Noise" value={storage?.noise_captures ?? 0} />
+          <Badge label="Protected" value={storage?.protected_captures ?? 0} />
+          <div className="border border-line bg-panel px-3 py-2">
+            <div className="text-xs text-slate-500">Disk</div>
+            <div className="mt-1 text-lg font-semibold">{formatBytes(storage?.total_bytes)}</div>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="border border-line bg-panel px-3 py-2 text-sm">
+            <div className="text-xs text-slate-500">Database</div>
+            <div className="mt-1 font-medium">{formatBytes(storage?.database_bytes)}</div>
+          </div>
+          <div className="border border-line bg-panel px-3 py-2 text-sm">
+            <div className="text-xs text-slate-500">Index</div>
+            <div className="mt-1 font-medium">{formatBytes(storage?.index_bytes)}</div>
+          </div>
+          <div className="border border-line bg-panel px-3 py-2 text-sm">
+            <div className="text-xs text-slate-500">Logs</div>
+            <div className="mt-1 font-medium">{formatBytes(storage?.log_bytes)}</div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-4">
+          <label className="field-label">
+            Mode
+            <select className="settings-input" value={policy.mode} onChange={(event) => setPolicy({ ...policy, mode: event.target.value })}>
+              <option value="light">Light</option>
+              <option value="balanced">Balanced</option>
+              <option value="deep">Deep memory</option>
+              <option value="archive">Archive</option>
+            </select>
+          </label>
+          <label className="field-label">
+            Retention Days
+            <input
+              className="settings-input"
+              value={policy.retention_days}
+              onChange={(event) => setPolicy({ ...policy, retention_days: Number(event.target.value) || 30 })}
+              type="number"
+            />
+          </label>
+          <label className="field-label">
+            Noise Hours
+            <input
+              className="settings-input"
+              value={policy.noise_retention_hours}
+              onChange={(event) => setPolicy({ ...policy, noise_retention_hours: Number(event.target.value) || 24 })}
+              type="number"
+            />
+          </label>
+          <label className="field-label">
+            Max DB MB
+            <input
+              className="settings-input"
+              value={policy.max_database_mb}
+              onChange={(event) => setPolicy({ ...policy, max_database_mb: Number(event.target.value) || 1024 })}
+              type="number"
+            />
+          </label>
+        </div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <label className="field-label">
+            Noise Apps
+            <textarea
+              className="settings-area"
+              value={policy.noise_apps.join('\n')}
+              onChange={(event) => updatePolicyList('noise_apps', event.target.value)}
+            />
+          </label>
+          <label className="field-label">
+            Noise Domains
+            <textarea
+              className="settings-area"
+              value={policy.noise_domains.join('\n')}
+              onChange={(event) => updatePolicyList('noise_domains', event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-700">
+          <label className="selection-control">
+            <input
+              checked={policy.auto_noise_enabled}
+              onChange={(event) => setPolicy({ ...policy, auto_noise_enabled: event.target.checked })}
+              type="checkbox"
+            />
+            <span>Auto-noise</span>
+          </label>
+          <label className="selection-control">
+            <input
+              checked={policy.keep_clicked}
+              onChange={(event) => setPolicy({ ...policy, keep_clicked: event.target.checked })}
+              type="checkbox"
+            />
+            <span>Protect clicked</span>
+          </label>
+          <label className="selection-control">
+            <input
+              checked={policy.protect_keep_labels}
+              onChange={(event) => setPolicy({ ...policy, protect_keep_labels: event.target.checked })}
+              type="checkbox"
+            />
+            <span>Protect keep labels</span>
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className="command-button" onClick={saveStorage} type="button">
+            <Check size={16} />
+            Save Policy
+          </button>
+          <button className="command-button" onClick={loadStorage} type="button">
+            <RefreshCw size={16} />
+            Refresh Storage
+          </button>
+          <button className="command-button danger" onClick={() => cleanupStorage(false)} type="button">
+            <X size={16} />
+            Clean Up
+          </button>
+          <button className="command-button danger" onClick={() => cleanupStorage(true)} type="button">
+            <HardDrive size={16} />
+            Clean + Reindex
           </button>
         </div>
       </div>

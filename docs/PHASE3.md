@@ -46,7 +46,7 @@ curl http://127.0.0.1:8765/health
 curl http://127.0.0.1:8765/stats
 ```
 
-Returns capture totals, app/source breakdowns, noise-label counts, latest capture timestamp, and whether an index artifact exists.
+Returns capture totals, app/source breakdowns, noise-label counts, latest capture timestamp, protected capture count, total storage bytes, and whether an index artifact exists.
 
 ### Recent
 
@@ -157,6 +157,32 @@ curl -X PUT http://127.0.0.1:8765/privacy \
   -H "Content-Type: application/json" \
   -d '{"blocked_apps":["1Password"],"blocked_domains":["bank"],"excluded_path_fragments":["/.ssh/"]}'
 ```
+
+### Storage Policy and Cleanup
+
+Inspect local storage:
+
+```sh
+curl http://127.0.0.1:8765/storage
+```
+
+Update retention and cleanup policy:
+
+```sh
+curl -X PUT http://127.0.0.1:8765/storage-policy \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"balanced","auto_noise_enabled":true,"min_text_chars":180,"retention_days":30,"noise_retention_hours":24,"max_database_mb":1024,"keep_clicked":true,"protect_keep_labels":true,"noise_apps":["Netflix","Spotify"],"noise_domains":["netflix.com","youtube.com"]}'
+```
+
+Run cleanup:
+
+```sh
+curl -X POST http://127.0.0.1:8765/cleanup \
+  -H "Content-Type: application/json" \
+  -d '{"confirm":true,"rebuild_index":true}'
+```
+
+Cleanup deletes old noise, exact duplicates, old unprotected captures, and oversized logs. Clicked captures and captures marked Keep are protected by default.
 
 ### Export
 

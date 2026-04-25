@@ -12,6 +12,8 @@ from .schemas import (
     BrowserCaptureRequest,
     BulkNoiseLabelRequest,
     BulkNoiseLabelResponse,
+    CleanupRequest,
+    CleanupResponse,
     ExportResponse,
     ForgetRequest,
     ForgetResponse,
@@ -26,20 +28,26 @@ from .schemas import (
     SearchRequest,
     SearchResponse,
     StatsResponse,
+    StoragePolicy,
+    StorageStatsResponse,
 )
 from .security import require_api_key
 from .service import (
     insert_browser_capture,
+    cleanup_storage,
     export_data,
     forget_captures,
     get_privacy_settings,
+    get_storage_policy,
     log_search_click,
     open_capture,
     recent,
     refresh_index,
     save_privacy_settings,
+    save_storage_policy,
     search,
     stats,
+    storage_stats,
     update_capture_noise_label,
     update_capture_noise_labels,
 )
@@ -179,6 +187,35 @@ def update_privacy_endpoint(request: PrivacySettings) -> PrivacySettings:
     return save_privacy_settings(request)
 
 
+@app.get("/storage", response_model=StorageStatsResponse, dependencies=[Depends(require_api_key)])
+def storage_endpoint() -> StorageStatsResponse:
+    return StorageStatsResponse(**storage_stats())
+
+
+@app.get("/storage-policy", response_model=StoragePolicy, dependencies=[Depends(require_api_key)])
+def storage_policy_endpoint() -> StoragePolicy:
+    return get_storage_policy()
+
+
+@app.put("/storage-policy", response_model=StoragePolicy, dependencies=[Depends(require_api_key)])
+def update_storage_policy_endpoint(request: StoragePolicy) -> StoragePolicy:
+    return save_storage_policy(request)
+
+
+@app.post("/cleanup", response_model=CleanupResponse, dependencies=[Depends(require_api_key)])
+def cleanup_endpoint(request: CleanupRequest) -> CleanupResponse:
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true before cleanup.")
+    return cleanup_storage(
+        delete_noise=request.delete_noise,
+        delete_duplicates=request.delete_duplicates,
+        apply_retention=request.apply_retention,
+        enforce_size_cap=request.enforce_size_cap,
+        rotate_logs=request.rotate_logs,
+        rebuild_index=request.rebuild_index,
+    )
+
+
 @app.get("/export", response_model=ExportResponse, dependencies=[Depends(require_api_key)])
 def export_endpoint() -> ExportResponse:
     return ExportResponse(**export_data())
@@ -216,6 +253,7 @@ async def _background_index_loop() -> None:
     while interval > 0:
         await asyncio.sleep(interval)
         try:
+            cleanup_storage(rebuild_index=False)
             refresh_index(
                 backend=settings.index_backend,
                 model=settings.index_model,

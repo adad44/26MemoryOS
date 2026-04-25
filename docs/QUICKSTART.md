@@ -24,6 +24,8 @@ Go to /path/to/memoryos, read README.md and docs/QUICKSTART.md, then run the loc
 
 The agent should use separate terminals or background processes for the backend and web UI.
 
+For a full explanation of every web UI tab and setting, read [WEB_UI_GUIDE.md](WEB_UI_GUIDE.md).
+
 ## Before You Start
 
 You need:
@@ -175,10 +177,10 @@ If only a few items are exceptions, select those checkboxes first. The buttons w
 4. Enable Developer mode.
 5. Click Load unpacked.
 6. Select the repo's `extension/` folder.
-7. Browse a normal page for a few seconds.
+7. Browse a normal page for about 45 seconds.
 8. Check the Recent tab in the web UI.
 
-The extension sends page title, URL, visible text, and timestamp to your local backend. It does not capture incognito tabs.
+The extension sends page title, URL, visible text, and timestamp to your local backend. It does not capture incognito tabs, obvious sensitive domains, very short pages, or common entertainment domains.
 
 ## 10. Optional: Native macOS Capture
 
@@ -205,7 +207,27 @@ open menubar/dist/MemoryOS.app
 
 The menu bar app can open the web UI, check backend status, refresh the index, and pause or resume native capture.
 
-## 11. Optional: Start At Login
+## 11. Manage Storage
+
+Open the Settings tab, then use the Storage panel.
+
+Useful defaults:
+
+- Balanced mode keeps unprotected captures for 30 days.
+- Noise captures are deleted after 24 hours.
+- Clicked search results and captures marked Keep are protected.
+- Exact duplicates are removed during cleanup.
+- The database cap defaults to 1 GB.
+
+Recommended routine:
+
+1. Mark useful captures as Keep from the Label tab.
+2. Mark junk groups as Noise.
+3. Open Settings.
+4. Click Clean Up.
+5. Click Clean + Reindex after large cleanups.
+
+## 12. Optional: Start At Login
 
 Install login startup:
 

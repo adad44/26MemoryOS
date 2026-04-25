@@ -4,7 +4,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from typing import Optional
@@ -18,11 +18,21 @@ if str(ML_ROOT) not in sys.path:
 from memoryos.config import database_path
 from memoryos.db import CAPTURE_COLUMNS, connect, fetch_captures
 from memoryos.features import normalize_text, result_snippet
-from memoryos.index import DEFAULT_EMBEDDER, INDEX_ARTIFACT_PATH, build_index, index_backend, search_index
+from memoryos.index import (
+    DEFAULT_EMBEDDER,
+    FAISS_INDEX_PATH,
+    FAISS_MAPPING_PATH,
+    INDEX_ARTIFACT_PATH,
+    build_index,
+    index_backend,
+    search_index,
+)
 from memoryos.reranker import rerank_hits
 
 from .schemas import CaptureResult
+from .schemas import CleanupResponse
 from .schemas import PrivacySettings
+from .schemas import StoragePolicy
 
 
 def row_to_capture_result(
@@ -49,6 +59,121 @@ def row_to_capture_result(
         file_path=row["file_path"],
         is_noise=row["is_noise"],
     )
+
+
+def _support_dir() -> Path:
+    support = Path.home() / "Library" / "Application Support" / "MemoryOS"
+    support.mkdir(parents=True, exist_ok=True)
+    return support
+
+
+def _path_size(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return path.stat().st_size
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+
+
+def _database_size_bytes() -> int:
+    db_path = database_path()
+    return sum(_path_size(Path(str(db_path) + suffix)) for suffix in ("", "-wal", "-shm"))
+
+
+def _index_size_bytes() -> int:
+    model_dir = PROJECT_ROOT / "ml" / "models"
+    return _path_size(model_dir)
+
+
+def _log_size_bytes() -> int:
+    return _path_size(PROJECT_ROOT / ".logs")
+
+
+def _protected_capture_ids(conn: sqlite3.Connection, policy: StoragePolicy) -> set[int]:
+    protected: set[int] = set()
+    if policy.protect_keep_labels:
+        protected.update(int(row["id"]) for row in conn.execute("SELECT id FROM captures WHERE is_noise = 0"))
+    if policy.keep_clicked:
+        protected.update(int(row["capture_id"]) for row in conn.execute("SELECT DISTINCT capture_id FROM search_clicks"))
+    return protected
+
+
+def _storage_policy_path() -> Path:
+    return _support_dir() / "storage_policy.json"
+
+
+DEFAULT_STORAGE_POLICY = StoragePolicy(
+    mode="balanced",
+    auto_noise_enabled=True,
+    min_text_chars=180,
+    retention_days=30,
+    noise_retention_hours=24,
+    max_database_mb=1024,
+    keep_clicked=True,
+    protect_keep_labels=True,
+    noise_apps=["Netflix", "Spotify", "TV", "Music", "Steam", "Games"],
+    noise_domains=["netflix.com", "youtube.com", "youtu.be", "tiktok.com", "instagram.com", "spotify.com"],
+)
+
+
+def get_storage_policy() -> StoragePolicy:
+    path = _storage_policy_path()
+    if not path.exists():
+        return DEFAULT_STORAGE_POLICY
+    data = json.loads(path.read_text(encoding="utf-8"))
+    defaults = DEFAULT_STORAGE_POLICY.dict()
+    defaults.update(data)
+    return StoragePolicy(**defaults)
+
+
+def save_storage_policy(policy: StoragePolicy) -> StoragePolicy:
+    presets = {
+        "light": {"retention_days": 7, "noise_retention_hours": 12, "max_database_mb": 512},
+        "balanced": {"retention_days": 30, "noise_retention_hours": 24, "max_database_mb": 1024},
+        "deep": {"retention_days": 90, "noise_retention_hours": 72, "max_database_mb": 4096},
+        "archive": {"retention_days": 3650, "noise_retention_hours": 168, "max_database_mb": 20_000},
+    }
+    if policy.mode in presets and policy.mode != get_storage_policy().mode:
+        policy = policy.copy(update=presets[policy.mode])
+    _storage_policy_path().write_text(json.dumps(policy.dict(), indent=2), encoding="utf-8")
+    return policy
+
+
+def _host_from_url(url: Optional[str]) -> str:
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+
+        return (urlparse(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def should_skip_capture(app_name: str, title: Optional[str], content: str, url: Optional[str], policy: StoragePolicy) -> bool:
+    text = normalize_text(content)
+    if len(text) < policy.min_text_chars:
+        return True
+    joined = " ".join([app_name or "", title or "", _host_from_url(url)]).lower()
+    if any(item.lower() in joined for item in policy.noise_apps):
+        return True
+    return False
+
+
+def auto_noise_label(app_name: str, title: Optional[str], content: str, url: Optional[str], policy: StoragePolicy) -> Optional[int]:
+    if not policy.auto_noise_enabled:
+        return None
+    host = _host_from_url(url)
+    joined = " ".join([app_name or "", title or "", host]).lower()
+    if any(item.lower() in joined for item in policy.noise_apps):
+        return 1
+    if any(fragment.lower() in host for fragment in policy.noise_domains):
+        return 1
+    text = normalize_text(content)
+    alpha_ratio = sum(char.isalpha() for char in text) / max(len(text), 1)
+    if len(text) < policy.min_text_chars or alpha_ratio < 0.25:
+        return 1
+    return None
 
 
 def search(query: str, top_k: int, candidate_k: int = 50) -> dict:
@@ -142,6 +267,7 @@ def stats() -> dict:
             )
         ]
         latest = conn.execute("SELECT MAX(timestamp) AS latest FROM captures").fetchone()["latest"]
+        protected = len(_protected_capture_ids(conn, get_storage_policy()))
 
     return {
         "database_path": str(db_path),
@@ -151,6 +277,8 @@ def stats() -> dict:
         "counts_by_source_type": by_source,
         "noise_counts": noise_counts,
         "latest_capture_at": latest,
+        "storage_bytes": _database_size_bytes() + _index_size_bytes() + _log_size_bytes(),
+        "protected_captures": protected,
     }
 
 
@@ -162,14 +290,32 @@ def _timestamp_from_browser(value: Optional[float]) -> str:
 
 def insert_browser_capture(url: Optional[str], title: Optional[str], content: str, timestamp: Optional[float]) -> int:
     cleaned = normalize_text(content)[:3_000]
+    policy = get_storage_policy()
+    if should_skip_capture("Browser", title, cleaned, url, policy):
+        return 0
+    label = auto_noise_label("Browser", title, cleaned, url, policy)
     with connect() as conn:
+        duplicate = conn.execute(
+            """
+            SELECT id FROM captures
+            WHERE source_type = 'browser'
+              AND COALESCE(url, '') = COALESCE(?, '')
+              AND COALESCE(window_title, '') = COALESCE(?, '')
+              AND content = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """,
+            (url, title, cleaned),
+        ).fetchone()
+        if duplicate:
+            return int(duplicate["id"])
         cursor = conn.execute(
             """
             INSERT INTO captures
-            (timestamp, app_name, window_title, content, source_type, url, file_path)
-            VALUES (?, ?, ?, ?, ?, ?, NULL)
+            (timestamp, app_name, window_title, content, source_type, url, file_path, is_noise)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
             """,
-            (_timestamp_from_browser(timestamp), "Browser", title, cleaned, "browser", url),
+            (_timestamp_from_browser(timestamp), "Browser", title, cleaned, "browser", url, label),
         )
         conn.commit()
         return int(cursor.lastrowid)
@@ -265,6 +411,165 @@ def save_privacy_settings(settings: PrivacySettings) -> PrivacySettings:
     path = _privacy_path()
     path.write_text(json.dumps(settings.dict(), indent=2), encoding="utf-8")
     return settings
+
+
+def storage_stats() -> dict:
+    policy = get_storage_policy()
+    with connect() as conn:
+        total = int(conn.execute("SELECT COUNT(*) AS count FROM captures").fetchone()["count"])
+        noise = int(conn.execute("SELECT COUNT(*) AS count FROM captures WHERE is_noise = 1").fetchone()["count"])
+        keep = int(conn.execute("SELECT COUNT(*) AS count FROM captures WHERE is_noise = 0").fetchone()["count"])
+        oldest = conn.execute("SELECT MIN(timestamp) AS oldest FROM captures").fetchone()["oldest"]
+        latest = conn.execute("SELECT MAX(timestamp) AS latest FROM captures").fetchone()["latest"]
+        protected = len(_protected_capture_ids(conn, policy))
+
+    db_size = _database_size_bytes()
+    index_size = _index_size_bytes()
+    log_size = _log_size_bytes()
+    return {
+        "database_bytes": db_size,
+        "index_bytes": index_size,
+        "log_bytes": log_size,
+        "total_bytes": db_size + index_size + log_size,
+        "total_captures": total,
+        "noise_captures": noise,
+        "keep_captures": keep,
+        "protected_captures": protected,
+        "oldest_capture_at": oldest,
+        "latest_capture_at": latest,
+        "policy": policy,
+    }
+
+
+def _delete_capture_ids(conn: sqlite3.Connection, ids: list[int]) -> int:
+    if not ids:
+        return 0
+    placeholders = ",".join("?" for _ in ids)
+    cursor = conn.execute(f"DELETE FROM captures WHERE id IN ({placeholders})", ids)
+    return int(cursor.rowcount)
+
+
+def _cleanup_duplicates(conn: sqlite3.Connection, protected: set[int]) -> int:
+    rows = conn.execute(
+        f"SELECT {CAPTURE_COLUMNS} FROM captures ORDER BY timestamp DESC, id DESC"
+    ).fetchall()
+    seen: set[tuple[str, str, str, str, str]] = set()
+    duplicate_ids: list[int] = []
+    for row in rows:
+        capture_id = int(row["id"])
+        key = (
+            str(row["source_type"] or ""),
+            str(row["app_name"] or ""),
+            str(row["window_title"] or ""),
+            str(row["url"] or row["file_path"] or ""),
+            str(row["content"] or ""),
+        )
+        if key in seen and capture_id not in protected:
+            duplicate_ids.append(capture_id)
+        else:
+            seen.add(key)
+    return _delete_capture_ids(conn, duplicate_ids)
+
+
+def _remove_index_artifacts() -> bool:
+    removed = False
+    for path in [INDEX_ARTIFACT_PATH, FAISS_INDEX_PATH, FAISS_MAPPING_PATH]:
+        if path.exists():
+            path.unlink()
+            removed = True
+    return removed
+
+
+def _rotate_logs(max_bytes: int = 5_000_000) -> int:
+    log_dir = PROJECT_ROOT / ".logs"
+    if not log_dir.exists():
+        return 0
+    rotated = 0
+    for path in log_dir.glob("*.log"):
+        if path.stat().st_size <= max_bytes:
+            continue
+        rotated_path = path.with_suffix(path.suffix + ".1")
+        rotated_path.unlink(missing_ok=True)
+        path.rename(rotated_path)
+        path.write_text("", encoding="utf-8")
+        rotated += 1
+    return rotated
+
+
+def cleanup_storage(
+    delete_noise: bool = True,
+    delete_duplicates: bool = True,
+    apply_retention: bool = True,
+    enforce_size_cap: bool = True,
+    rotate_logs: bool = True,
+    rebuild_index: bool = False,
+) -> CleanupResponse:
+    policy = get_storage_policy()
+    before_size = _database_size_bytes() + _index_size_bytes() + _log_size_bytes()
+    deleted_noise = 0
+    deleted_old = 0
+    deleted_duplicates = 0
+    deleted_for_size = 0
+
+    with connect() as conn:
+        protected = _protected_capture_ids(conn, policy)
+        if delete_noise:
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=policy.noise_retention_hours)).isoformat()
+            cursor = conn.execute("DELETE FROM captures WHERE is_noise = 1 AND timestamp < ?", (cutoff,))
+            deleted_noise = int(cursor.rowcount)
+
+        if apply_retention:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=policy.retention_days)).isoformat()
+            rows = conn.execute("SELECT id FROM captures WHERE timestamp < ? ORDER BY timestamp ASC", (cutoff,)).fetchall()
+            old_ids = [int(row["id"]) for row in rows if int(row["id"]) not in protected]
+            deleted_old = _delete_capture_ids(conn, old_ids)
+
+        if delete_duplicates:
+            protected = _protected_capture_ids(conn, policy)
+            deleted_duplicates = _cleanup_duplicates(conn, protected)
+
+        conn.commit()
+
+        if enforce_size_cap and _database_size_bytes() > policy.max_database_mb * 1_000_000:
+            protected = _protected_capture_ids(conn, policy)
+            rows = conn.execute("SELECT id FROM captures ORDER BY timestamp ASC").fetchall()
+            size_ids = []
+            for row in rows:
+                capture_id = int(row["id"])
+                if capture_id not in protected:
+                    size_ids.append(capture_id)
+                if len(size_ids) >= 500:
+                    break
+            deleted_for_size = _delete_capture_ids(conn, size_ids)
+            conn.commit()
+
+        deleted_total = deleted_noise + deleted_old + deleted_duplicates + deleted_for_size
+        if deleted_total:
+            conn.execute("VACUUM")
+
+    logs_rotated = _rotate_logs() if rotate_logs else 0
+    index_removed = False
+    index_rebuilt = False
+    if deleted_noise + deleted_old + deleted_duplicates + deleted_for_size:
+        index_removed = _remove_index_artifacts()
+        if rebuild_index:
+            try:
+                refresh_index("auto", None, None)
+                index_rebuilt = True
+            except Exception:
+                index_rebuilt = False
+
+    after_size = _database_size_bytes() + _index_size_bytes() + _log_size_bytes()
+    return CleanupResponse(
+        deleted_noise=deleted_noise,
+        deleted_old=deleted_old,
+        deleted_duplicates=deleted_duplicates,
+        deleted_for_size=deleted_for_size,
+        logs_rotated=logs_rotated,
+        index_removed=index_removed,
+        index_rebuilt=index_rebuilt,
+        reclaimed_hint_bytes=max(0, before_size - after_size),
+    )
 
 
 def export_data() -> dict:

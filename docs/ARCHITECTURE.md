@@ -23,7 +23,7 @@ The daemon also honors `~/Library/Application Support/MemoryOS/capture.paused`, 
 
 Location: `extension/`
 
-The Chrome extension captures page title, URL, and visible body text after the user has remained on a page for at least 10 seconds. It posts captures to a localhost ingest endpoint. Incognito tabs and obvious sensitive domains are skipped.
+The Chrome extension captures page title, URL, and visible body text after the user has remained on a page for at least 45 seconds. It posts captures to a localhost ingest endpoint. Incognito tabs, obvious sensitive domains, common entertainment domains, and very short pages are skipped.
 
 ### Browser ingest server
 
