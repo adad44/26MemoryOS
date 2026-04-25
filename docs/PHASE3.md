@@ -4,6 +4,14 @@ Phase 3 adds the local FastAPI service that serves MemoryOS search, stats, recen
 
 ## Run
 
+Normal users should run the full installer:
+
+```sh
+scripts/install_memoryos.sh
+```
+
+For backend-only debugging:
+
 ```sh
 scripts/run_backend.sh
 ```
@@ -112,7 +120,7 @@ Request body:
 
 ### Click Logging
 
-Phase 4 will use this endpoint to collect labels for the re-ranker:
+The web UI uses this endpoint to collect labels for the re-ranker:
 
 ```sh
 curl -X POST "http://127.0.0.1:8765/click?query=python&capture_id=1&rank=1&dwell_ms=4200"

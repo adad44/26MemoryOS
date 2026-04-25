@@ -25,11 +25,9 @@ Location: `extension/`
 
 The Chrome extension captures page title, URL, and visible body text after the user has remained on a page for at least 45 seconds. It posts captures to a localhost ingest endpoint. Incognito tabs, obvious sensitive domains, common entertainment domains, and very short pages are skipped.
 
-### Browser ingest server
+### Browser capture ingest
 
-Location: `scripts/browser_ingest_server.py`
-
-This lightweight local server accepts browser captures at:
+The Chrome extension posts directly to the local FastAPI backend:
 
 ```text
 POST http://127.0.0.1:8765/capture/browser
@@ -41,50 +39,73 @@ It writes rows to the same SQLite `captures` table used by the daemon.
 
 Reference schema: `docs/schema.sql`
 
-SQLite stores two core entities:
+SQLite stores local MemoryOS state:
 
 - `captures`: captured content and metadata.
 - `sessions`: app usage sessions.
+- `search_clicks`: opened search results and dwell signals.
+- `todos`: follow-up tasks.
+- `beliefs`, `user_model`, and `abstraction_runs`: Phase 7 local user-model state.
 
-The schema leaves room for Phase 2 ML outputs with `is_noise` and `embedding` columns.
+The schema also tracks `is_noise`, `is_pinned`, and optional embedding data.
 
-### ML pipeline
+### Search and ML pipeline
 
 Location: `ml/`
 
-Planned Phase 2 responsibilities:
+Current responsibilities:
 
+- Build a TF-IDF index by default.
+- Optionally use sentence-transformer and FAISS after installing embedding extras.
 - Label captures as useful or noise.
-- Train a noise classifier.
-- Fine-tune a sentence-transformer embedding model.
-- Build and refresh a FAISS vector index.
-- Train a re-ranker after click data exists.
+- Train a noise classifier and temporal re-ranker from local labels/clicks.
+- Generate candidate pairs and fine-tune an embedder for future semantic search.
 
 ### Search backend
 
 Location: `backend/`
 
-Phase 3 responsibilities:
+Backend responsibilities:
 
-- Serve semantic search through FastAPI.
-- Load the embedding model and FAISS index.
+- Serve local search through FastAPI.
+- Load the TF-IDF, sentence-transformer, or FAISS index.
 - Fetch metadata from SQLite.
-- Expose `/search`, `/stats`, and `/recent`.
+- Expose search, stats, recent captures, collections, digest, todos, storage, privacy, export/delete, and Phase 7 user-model endpoints.
 - Refresh the index through `/refresh-index`.
 - Accept browser capture ingest through `/capture/browser`.
+- Trigger macOS `open` for captured URLs and file paths through `/open`.
 
 ### Web UI
 
 Location: `web/`
 
-Phase 4 responsibilities:
+Web UI responsibilities:
 
 - Search interface.
 - Result cards and filters.
 - Stats dashboard.
 - Click logging for re-ranker labels.
 - Manual keep/noise labeling.
-- Backend settings and index refresh.
+- Smart collections, weekly digest, todos, and user model.
+- Storage cleanup, privacy settings, backend settings, and index refresh.
+
+### Menu bar app
+
+Location: `menubar/`
+
+The Swift menu bar app shows backend status, opens the web UI, refreshes the index, pauses capture, and walks the user through Accessibility, Full Disk Access, and Screen Recording fallback permissions.
+
+### Local user model
+
+Location: `backend/abstraction_engine.py`
+
+Phase 7 runs every 6 hours through `com.memoryos.scheduler`. It reads recent non-noise captures, calls local Ollama/Mistral in JSON mode, stores structured beliefs, and renders the result in the You tab.
+
+### Installer
+
+Location: `scripts/install_memoryos.sh`
+
+The installer is the supported first-run path. It copies app files to `~/Library/Application Support/MemoryOS/app`, installs dependencies, builds the web/native apps, starts Ollama, pulls `mistral` if needed, registers launch agents, verifies services, and opens the web UI.
 
 ## Data Flow
 
@@ -98,19 +119,21 @@ flowchart LR
   end
 
   browser["Browser Extension"]
-  ingest["Local Browser Ingest\n127.0.0.1:8765"]
+  ingest["FastAPI Capture Ingest\n/capture/browser"]
   sqlite[("SQLite\ncaptures + sessions")]
 
-  subgraph ml["ML Pipeline"]
-    noise["Noise Classifier"]
-    embedder["Embedding Model"]
-    faiss[("FAISS Index")]
+  subgraph ml["Search + ML Pipeline"]
+    noise["Noise Rules / Classifier"]
+    embedder["TF-IDF or Embedding Model"]
+    faiss[("Index Artifact")]
     reranker["Temporal Re-ranker"]
   end
 
-  api["FastAPI Backend\n/search /stats /recent"]
+  api["FastAPI Backend\nsearch / stats / todos / user model"]
   web["React Web UI"]
-  menu["SwiftUI Menu Bar App"]
+  menu["Swift Menu Bar App"]
+  ollama["Ollama / Mistral"]
+  usermodel[("beliefs + user_model")]
 
   ax --> sqlite
   sessions --> sqlite
@@ -119,6 +142,7 @@ flowchart LR
   browser --> ingest --> sqlite
   sqlite --> noise --> embedder --> faiss --> api
   sqlite --> api
+  sqlite --> ollama --> usermodel --> api
   reranker --> api
   api --> web
   menu --> web

@@ -4,13 +4,19 @@ Phase 2 adds the local ML tooling for filtering, embedding, indexing, and search
 
 ## Prerequisites
 
-Install the ML dependencies:
+The default installer includes the lightweight runtime needed for TF-IDF search. Install the heavier embedding dependencies only when training or using sentence-transformer/FAISS search:
 
 ```sh
 python3 -m pip install -r ml/requirements.txt
 ```
 
-The current local environment already has `numpy`, `pandas`, `sklearn`, `joblib`, and `torch`. It still needs `sentence-transformers` and `faiss-cpu` for the full semantic path. Until then, the index builder can use a TF-IDF fallback.
+The one-command installer can also install those extras:
+
+```sh
+scripts/install_memoryos.sh --with-embeddings
+```
+
+Without those extras, the index builder uses the TF-IDF fallback.
 
 ## 2.1 Noise Classifier
 
@@ -93,7 +99,7 @@ python3 ml/serve/search.py "that article about attention mechanisms I read last 
 
 ## 2.4 Temporal Re-Ranker
 
-The re-ranker trains from `search_clicks`, which will be populated by the web UI in Phase 4. Once click data exists:
+The re-ranker trains from `search_clicks`, which the web UI populates when users open search results. Once click data exists:
 
 ```sh
 python3 ml/train/train_reranker.py
@@ -112,4 +118,4 @@ The Phase 2 code is complete, but model artifacts require real captured data:
 - Noise classifier needs at least 20 labeled rows, with both `0=keep` and `1=noise`.
 - Embedding fine-tuning needs enough non-noise captures to generate useful pairs.
 - FAISS index creation needs `sentence-transformers` and `faiss-cpu` installed.
-- Re-ranker training needs search click logs from the future UI.
+- Re-ranker training needs enough search click and dwell logs from real use.

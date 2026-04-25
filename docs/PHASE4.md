@@ -4,7 +4,13 @@ Phase 4 adds a React/Vite/Tailwind web UI for the local MemoryOS backend.
 
 ## Run
 
-Start the backend:
+Normal users should run the full installer:
+
+```sh
+scripts/install_memoryos.sh
+```
+
+For web UI debugging, start the backend:
 
 ```sh
 scripts/run_backend.sh

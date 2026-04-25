@@ -133,8 +133,8 @@ Most local users should leave it blank. It is only needed when someone deliberat
 
 ```text
 memoryos/
-├── backend/         # FastAPI search, capture, stats, privacy, export, delete
-├── web/             # React UI for search, review, labeling, stats, settings
+├── backend/         # FastAPI search, capture, todos, user model, storage, privacy, export/delete
+├── web/             # React UI for dashboard, search, review, todos, You, stats, settings
 ├── extension/       # Chrome extension for browser capture
 ├── daemon/          # Swift background capture process
 ├── menubar/         # Swift menu bar app
@@ -144,15 +144,17 @@ memoryos/
 └── config/          # Example privacy configuration
 ```
 
-## Main Commands
+## Developer Commands
 
-Run backend:
+The normal first-run command is `scripts/install_memoryos.sh`. The commands below are useful when debugging individual pieces from a checkout.
+
+Run backend debug server:
 
 ```sh
 scripts/run_backend.sh
 ```
 
-Run web UI:
+Run web UI dev server:
 
 ```sh
 cd web
@@ -215,6 +217,7 @@ Remaining real-world work includes training production models on real labeled da
 
 - [Quickstart](docs/QUICKSTART.md)
 - [Web UI guide](docs/WEB_UI_GUIDE.md)
+- [Agent integration](docs/AGENT_INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Demo script](docs/DEMO_SCRIPT.md)

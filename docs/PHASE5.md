@@ -2,7 +2,17 @@
 
 Phase 5 adds a SwiftUI menu bar app and launch-agent packaging for login startup.
 
-## Build
+## Install
+
+Normal users should run:
+
+```sh
+scripts/install_memoryos.sh
+```
+
+That builds the daemon and menu bar app, copies MemoryOS into `~/Library/Application Support/MemoryOS/app`, and registers launch agents.
+
+## Build For Debugging
 
 Build the daemon:
 
@@ -22,9 +32,9 @@ Output:
 menubar/dist/MemoryOS.app
 ```
 
-## Run
+## Run For Debugging
 
-Start the backend and web UI first:
+Start the backend and web UI first, unless you already used the installer:
 
 ```sh
 scripts/run_backend.sh
@@ -75,6 +85,8 @@ The Swift daemon checks this flag before saving Accessibility and file captures.
 
 ## Launch Agents
 
+The one-command installer handles all launch agents. Individual commands are available for debugging.
+
 Install daemon launch at login:
 
 ```sh
@@ -87,6 +99,18 @@ Install backend launch at login:
 scripts/install_backend_launch_agent.sh
 ```
 
+Install web UI launch at login:
+
+```sh
+scripts/install_web_launch_agent.sh
+```
+
+Install scheduler launch at login:
+
+```sh
+scripts/install_scheduler_launch_agent.sh
+```
+
 Uninstall daemon launch agent:
 
 ```sh
@@ -97,6 +121,18 @@ Uninstall backend launch agent:
 
 ```sh
 scripts/uninstall_backend_launch_agent.sh
+```
+
+Uninstall web UI launch agent:
+
+```sh
+scripts/uninstall_web_launch_agent.sh
+```
+
+Uninstall scheduler launch agent:
+
+```sh
+scripts/uninstall_scheduler_launch_agent.sh
 ```
 
 Install menu bar launch at login:
@@ -116,6 +152,8 @@ The plist files are written to:
 ```text
 ~/Library/LaunchAgents/com.memoryos.daemon.plist
 ~/Library/LaunchAgents/com.memoryos.backend.plist
+~/Library/LaunchAgents/com.memoryos.web.plist
+~/Library/LaunchAgents/com.memoryos.scheduler.plist
 ~/Library/LaunchAgents/com.memoryos.menubar.plist
 ```
 

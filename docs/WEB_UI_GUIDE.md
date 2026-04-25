@@ -8,7 +8,7 @@ Default local URL:
 http://127.0.0.1:5173
 ```
 
-If Vite chooses another port, use the URL printed by `npm run dev`.
+The one-command installer starts the web UI there and opens it automatically. If you are debugging with `npm run dev` and Vite chooses another port, use the URL printed by Vite.
 
 ## Home
 

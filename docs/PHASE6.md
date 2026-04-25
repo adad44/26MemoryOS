@@ -58,7 +58,7 @@ Completed:
 - `docs/QUICKSTART.md`
 - `docs/ARCHITECTURE.md`
 - `docs/schema.sql`
-- Phase reports: `docs/PHASE0.md` through `docs/PHASE6.md`
+- Phase reports: `docs/PHASE0.md` through `docs/PHASE7.md`
 - `docs/DEPLOYMENT.md`
 - `docs/DEMO_SCRIPT.md`
 - Model cards in `docs/model-cards/`
@@ -69,7 +69,7 @@ Completed:
 
 - Local-first architecture.
 - GitHub-ready `.gitignore`.
-- Reproducible scripts for build, launch, benchmark, export, and install.
+- One-command installer plus reproducible scripts for build, launch, benchmark, export, and install.
 - Model cards for planned ML artifacts.
 - Demo script for a short walkthrough.
 
