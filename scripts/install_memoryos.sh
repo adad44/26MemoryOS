@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ORIGINAL_ARGS=("$@")
 MODEL="${MEMORYOS_OLLAMA_MODEL:-mistral}"
+INSTALL_ROOT="${MEMORYOS_INSTALL_ROOT:-$HOME/Library/Application Support/MemoryOS/app}"
 INSTALL_OLLAMA=1
 PULL_MODEL=1
 INSTALL_NATIVE=1
@@ -11,6 +13,7 @@ INSTALL_LAUNCH_AGENTS=1
 INSTALL_SCHEDULER=1
 INSTALL_EMBEDDINGS=0
 OPEN_WEB_UI=1
+COPY_TO_INSTALL_ROOT=1
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
@@ -29,6 +32,7 @@ Options:
   --no-launch-agents  Install dependencies only; do not register services.
   --no-scheduler      Do not install the 6-hour Phase 7 abstraction scheduler.
   --no-open           Do not open the web UI after install.
+  --no-copy-install   Run launch agents from the current checkout.
   --with-embeddings   Install Torch, sentence-transformers, and FAISS extras.
   --model NAME        Ollama model to pull/use. Default: mistral.
   -h, --help          Show this help.
@@ -163,6 +167,29 @@ stop_existing_memoryos_agents() {
   done
 }
 
+copy_to_install_root_and_reexec() {
+  if [[ "$ROOT" == "$INSTALL_ROOT" ]]; then
+    return
+  fi
+
+  log "Copying app files to $INSTALL_ROOT"
+  mkdir -p "$INSTALL_ROOT"
+  rsync -a --delete \
+    --exclude ".git/" \
+    --exclude ".venv/" \
+    --exclude ".logs/" \
+    --exclude "web/node_modules/" \
+    --exclude "web/dist/" \
+    --exclude "daemon/.build/" \
+    --exclude "menubar/.build/" \
+    --exclude "menubar/dist/" \
+    --exclude "presentation-workspace/node_modules/" \
+    "$ROOT/" "$INSTALL_ROOT/"
+
+  log "Continuing install from $INSTALL_ROOT"
+  exec "$INSTALL_ROOT/scripts/install_memoryos.sh" --no-copy-install "${ORIGINAL_ARGS[@]}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-ollama)
@@ -194,6 +221,10 @@ while [[ $# -gt 0 ]]; do
       OPEN_WEB_UI=0
       shift
       ;;
+    --no-copy-install)
+      COPY_TO_INSTALL_ROOT=0
+      shift
+      ;;
     --with-embeddings)
       INSTALL_EMBEDDINGS=1
       shift
@@ -217,6 +248,10 @@ done
 have brew || die "Homebrew is required. Install it from https://brew.sh, then rerun this script."
 
 log "Installing MemoryOS from $ROOT"
+
+if (( INSTALL_LAUNCH_AGENTS == 1 && COPY_TO_INSTALL_ROOT == 1 )); then
+  copy_to_install_root_and_reexec
+fi
 
 log "Checking system tools"
 PYTHON_BIN="$(select_python || true)"

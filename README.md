@@ -29,7 +29,7 @@ One-command macOS install from the repo root:
 scripts/install_memoryos.sh
 ```
 
-That command creates the Python virtual environment, installs backend and web dependencies, builds the React UI, installs/starts Ollama, pulls the local `mistral` model if needed, builds the Swift daemon/menu bar app, registers launch agents, starts MemoryOS on login, and opens the web UI.
+That command copies app files to `~/Library/Application Support/MemoryOS/app`, creates the Python virtual environment, installs backend and web dependencies, builds the React UI, installs/starts Ollama, pulls the local `mistral` model if needed, builds the Swift daemon/menu bar app, registers launch agents, starts MemoryOS on login, and opens the web UI.
 
 The default install uses the lightweight TF-IDF search runtime. Install the heavier sentence-transformer/FAISS extras only if you want embedding search or model training:
 

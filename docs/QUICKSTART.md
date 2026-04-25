@@ -24,6 +24,7 @@ The installer handles the normal local setup:
 - Installs and starts Ollama through Homebrew.
 - Pulls the local `mistral` model if it is missing.
 - Builds the Swift daemon and menu bar app.
+- Copies app files to `~/Library/Application Support/MemoryOS/app` before installing launch agents.
 - Registers launch agents for the backend, web UI, daemon, menu bar app, and Phase 7 scheduler.
 - Opens the web UI in the browser when the install finishes.
 
@@ -47,6 +48,7 @@ scripts/install_memoryos.sh --skip-native       # backend/web only
 scripts/install_memoryos.sh --skip-ollama       # no local LLM setup
 scripts/install_memoryos.sh --no-launch-agents  # install dependencies only
 scripts/install_memoryos.sh --no-open           # do not open browser after install
+scripts/install_memoryos.sh --no-copy-install   # run launch agents from this checkout
 scripts/install_memoryos.sh --with-embeddings   # add Torch, sentence-transformers, FAISS
 scripts/install_memoryos.sh --model llama3.2    # use a different Ollama model
 ```
