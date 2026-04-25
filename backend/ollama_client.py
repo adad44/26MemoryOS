@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 OLLAMA_BASE = os.environ.get("MEMORYOS_OLLAMA_BASE", "http://localhost:11434")
 MODEL = os.environ.get("MEMORYOS_OLLAMA_MODEL", "mistral")
-TIMEOUT = int(os.environ.get("MEMORYOS_OLLAMA_TIMEOUT", "120"))
+TIMEOUT = int(os.environ.get("MEMORYOS_OLLAMA_TIMEOUT", "300"))
 
 
 def is_ollama_running() -> bool:
@@ -28,6 +28,7 @@ def generate(prompt: str, system: str = "", temperature: float = 0.2) -> Optiona
         "model": MODEL,
         "prompt": prompt,
         "system": system,
+        "format": "json",
         "stream": False,
         "options": {
             "temperature": temperature,

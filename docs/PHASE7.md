@@ -55,6 +55,8 @@ python3 backend/abstraction_engine.py
 
 If Ollama is not running, the run is recorded as failed in `abstraction_runs` and no captures leave the machine.
 
+The Ollama client requests JSON output and allows up to 300 seconds by default because local models can be slow on first or larger abstraction runs.
+
 ## Run Every 6 Hours
 
 Use the scheduler:

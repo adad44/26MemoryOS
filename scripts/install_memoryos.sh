@@ -142,7 +142,7 @@ wait_for_url() {
   local tries=0
   until curl -fsS --max-time 3 "$url" >/dev/null 2>&1; do
     tries=$((tries + 1))
-    if (( tries > 60 )); then
+    if (( tries > 180 )); then
       warn "$name did not respond at $url"
       return 1
     fi
