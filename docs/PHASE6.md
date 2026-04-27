@@ -1,6 +1,6 @@
 # Phase 6 Polish and Launch
 
-Phase 6 turns MemoryOS from a phase-by-phase prototype into a documented, demo-ready local project.
+Phase 6 turns MemoryOS from phase-by-phase implementation into a documented, demo-ready local project.
 
 ## 6.1 Performance
 

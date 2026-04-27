@@ -23,7 +23,13 @@ The short version: run MemoryOS locally, collect a small amount of context, buil
 
 ## Quick Start
 
-One-command macOS install from the repo root:
+From a fresh Mac, use the public installer:
+
+```sh
+curl -fsSL https://memoryos-mac.netlify.app/install.sh | bash
+```
+
+From an existing checkout, use the repo-local installer:
 
 ```sh
 scripts/install_memoryos.sh
@@ -51,9 +57,29 @@ For a tab-by-tab explanation of the web app, see:
 
 [docs/WEB_UI_GUIDE.md](docs/WEB_UI_GUIDE.md)
 
-Advanced manual setup is kept in [docs/QUICKSTART.md](docs/QUICKSTART.md) for debugging only. New users should start with the installer, not separate backend and web terminals.
+Manual backend path if you are debugging individual pieces:
 
-The installer file is [scripts/install_memoryos.sh](scripts/install_memoryos.sh).
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -r backend/requirements.txt
+scripts/run_backend.sh
+```
+
+In a second terminal:
+
+```sh
+cd web
+npm install
+npm run dev
+```
+
+Open the web UI:
+
+```text
+http://127.0.0.1:5173
+```
 
 ## Use It With An AI Coding Agent
 
@@ -62,31 +88,27 @@ If you use Codex, Claude Code, Cursor, or another coding agent, point the agent 
 Copy this prompt:
 
 ```text
-You are in the MemoryOS repository. Run scripts/install_memoryos.sh, then verify http://127.0.0.1:8765/health and http://127.0.0.1:5173. Do not delete local data unless I explicitly ask.
+You are in the MemoryOS repository. Read README.md and docs/QUICKSTART.md, then run MemoryOS locally. Install the needed Python and Node dependencies, start the FastAPI backend, start the React web UI, add one test capture, build a TF-IDF index, verify search works, and tell me the local URLs. Do not delete local data unless I explicitly ask.
 ```
 
 If the agent is not already inside the repo, give it the path first:
 
 ```text
-Go to /path/to/memoryos and run scripts/install_memoryos.sh.
+Go to /path/to/memoryos, read README.md and docs/QUICKSTART.md, then run the local MemoryOS quickstart.
 ```
 
 For this local checkout, the path is usually the folder that contains this README.
 
 ## Everyday Workflow
 
-1. Run `scripts/install_memoryos.sh` once.
-2. Open the web UI at `http://127.0.0.1:5173`.
-3. Grant macOS permissions from the menu bar app when prompted.
+1. Run `scripts/install_memoryos.sh` once, or use the public `curl ... | bash` installer.
+2. Grant Accessibility and Full Disk Access when prompted.
+3. Open the web UI at `http://127.0.0.1:5173`.
 4. Add captures through the Chrome extension, the macOS daemon, or a test API call.
 5. Open the Stats tab and click Reindex.
-6. Search from the Search tab.
-7. Pin high-value results from Search.
-8. Review Collections and Digest to see what MemoryOS thinks matters.
-9. Add follow-ups in Todo.
-10. Open You to inspect the local user model.
-11. Use the Label tab to batch-mark visible captures as Keep or Noise.
-12. Use Settings to manage privacy lists, storage policy, export JSON, or delete filtered captures.
+6. Use the web UI to search your history, label captures, and view your personal memory stats.
+7. Open You to inspect the local user model when Ollama is running.
+8. Use Settings to manage privacy lists, storage policy, export JSON, or delete filtered captures.
 
 ## Storage Management
 
@@ -121,7 +143,7 @@ Use a disposable database while testing:
 MEMORYOS_DB=/tmp/memoryos.db scripts/run_backend.sh
 ```
 
-The prototype is unsigned. The menu bar app includes local permission onboarding for Accessibility, Full Disk Access review, and Screen Recording fallback setup. If you distribute it outside local development, you should add app signing and notarization.
+The local app bundle is currently unsigned. The menu bar app includes local permission onboarding for Accessibility, Full Disk Access review, and Screen Recording fallback setup. If you distribute it outside local development, add app signing and notarization.
 
 ### Optional API Key
 
@@ -133,8 +155,8 @@ Most local users should leave it blank. It is only needed when someone deliberat
 
 ```text
 memoryos/
-├── backend/         # FastAPI search, capture, todos, user model, storage, privacy, export/delete
-├── web/             # React UI for dashboard, search, review, todos, You, stats, settings
+├── backend/         # FastAPI search, capture, stats, privacy, export, delete
+├── web/             # React UI for search, review, labeling, stats, settings
 ├── extension/       # Chrome extension for browser capture
 ├── daemon/          # Swift background capture process
 ├── menubar/         # Swift menu bar app
@@ -144,17 +166,15 @@ memoryos/
 └── config/          # Example privacy configuration
 ```
 
-## Developer Commands
+## Main Commands
 
-The normal first-run command is `scripts/install_memoryos.sh`. The commands below are useful when debugging individual pieces from a checkout.
-
-Run backend debug server:
+Run backend manually:
 
 ```sh
 scripts/run_backend.sh
 ```
 
-Run web UI dev server:
+Run web UI manually:
 
 ```sh
 cd web
@@ -198,12 +218,12 @@ curl -X POST http://127.0.0.1:8765/search \
 
 ## Current Status
 
-All planned prototype phases are implemented for local development:
+All planned local-development phases are implemented:
 
 | Phase | Name | Status |
 | :-- | :-- | :-- |
 | 0 | Setup & Architecture | Complete |
-| 1 | Data Capture Layer | Baseline implemented |
+| 1 | Data Capture Layer | Complete |
 | 2 | ML Pipeline | Code complete; needs captured/labeled data |
 | 3 | Search Backend | Complete |
 | 4 | Web Interface | Complete |
@@ -211,13 +231,12 @@ All planned prototype phases are implemented for local development:
 | 6 | Polish & Deploy | Complete |
 | 7 | Local User Model | Complete |
 
-Remaining real-world work includes training production models on real labeled data, app signing/notarization, and additional permission onboarding.
+Remaining release work includes training production models on real labeled data, app signing/notarization, and broader distribution packaging.
 
 ## More Documentation
 
 - [Quickstart](docs/QUICKSTART.md)
 - [Web UI guide](docs/WEB_UI_GUIDE.md)
-- [Agent integration](docs/AGENT_INTEGRATION.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Demo script](docs/DEMO_SCRIPT.md)

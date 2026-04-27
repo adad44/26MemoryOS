@@ -1,0 +1,162 @@
+
+<style>
+  .journey { padding: 16px 0; font-family: var(--font-sans); }
+  .phase-label { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 6px; }
+  .step-card { border-radius: var(--border-radius-lg); border: 1px solid var(--color-border-tertiary); padding: 16px 18px; margin-bottom: 10px; position: relative; }
+  .step-card.active { border-color: var(--color-border-secondary); box-shadow: 0 0 0 2px var(--color-border-tertiary); }
+  .step-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .step-badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .badge-setup   { background: #EEEDFE; color: #3C3489; }
+  .badge-capture { background: #E1F5EE; color: #0F6E56; }
+  .badge-filter  { background: #F1EFE8; color: #5F5E5A; }
+  .badge-search  { background: #FAEEDA; color: #854F0B; }
+  .badge-result  { background: #EAF3DE; color: #3B6D11; }
+  @media (prefers-color-scheme: dark) {
+    .badge-setup   { background: #26215C; color: #CECBF6; }
+    .badge-capture { background: #04342C; color: #9FE1CB; }
+    .badge-filter  { background: #2C2C2A; color: #D3D1C7; }
+    .badge-search  { background: #412402; color: #FAC775; }
+    .badge-result  { background: #173404; color: #C0DD97; }
+  }
+  .step-app { font-size: 12px; color: var(--color-text-tertiary); margin-left: auto; }
+  .step-user { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+  .step-system { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
+  .step-system strong { color: var(--color-text-primary); font-weight: 500; }
+  .connector { width: 2px; height: 14px; background: var(--color-border-tertiary); margin: 0 0 0 28px; border-radius: 1px; }
+  .nav { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .nav button { padding: 7px 16px; border-radius: var(--border-radius-md); border: 1px solid var(--color-border-secondary); background: var(--color-background-secondary); color: var(--color-text-primary); font-size: 13px; cursor: pointer; }
+  .nav button:disabled { opacity: .35; cursor: default; }
+  .nav button:not(:disabled):hover { background: var(--color-background-tertiary); }
+  .progress { flex: 1; font-size: 12px; color: var(--color-text-tertiary); text-align: center; }
+  .dots { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-border-secondary); transition: background .2s; }
+  .dot.active { background: var(--color-text-secondary); }
+  .time-banner { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 8px 14px; font-size: 12px; color: var(--color-text-secondary); text-align: center; margin: 4px 0 10px; border: 1px solid var(--color-border-tertiary); }
+</style>
+
+<div class="journey">
+  <div id="steps-container"></div>
+  <div class="dots" id="dots"></div>
+  <div class="nav">
+    <button id="prev" onclick="go(-1)">← Prev</button>
+    <div class="progress" id="progress"></div>
+    <button id="next" onclick="go(1)">Next →</button>
+  </div>
+</div>
+
+<script>
+const steps = [
+  {
+    badge: 'setup', badgeLabel: 'Setup',
+    app: 'System',
+    user: 'Install MemoryOS & grant accessibility permissions',
+    system: 'SwiftUI onboarding walks through macOS TCC permissions — <strong>Accessibility</strong>, <strong>Screen Recording</strong> (fallback only), and <strong>Full Disk Access</strong> for file watching.',
+    time: null
+  },
+  {
+    badge: 'setup', badgeLabel: 'Setup',
+    app: 'Menu bar',
+    user: 'MemoryOS daemon starts silently in the background',
+    system: 'A tiny brain icon appears in the menu bar. The daemon registers as a <strong>Launch Agent</strong> — it will auto-start on every login. No windows, no UI clutter.',
+    time: null
+  },
+  {
+    badge: 'capture', badgeLabel: 'Passive capture',
+    app: 'VSCode',
+    user: 'User opens a Python file and starts debugging a training loop',
+    system: '<strong>AXUIElement API</strong> reads the visible file content, active tab name, and window title every 10 seconds. Writes to SQLite: app=VSCode, file_path=train.py, content=first 2000 chars.',
+    time: '9:12 AM'
+  },
+  {
+    badge: 'capture', badgeLabel: 'Passive capture',
+    app: 'Safari',
+    user: 'User navigates to an arXiv paper on attention mechanisms',
+    system: '<strong>Browser extension</strong> detects 45+ seconds of dwell time. Captures: url=arxiv.org/abs/..., title="Attention Is All You Need", body text (first 3000 chars). Noise classifier scores it 0.02 — clearly useful content.',
+    time: '10:34 AM'
+  },
+  {
+    badge: 'capture', badgeLabel: 'Passive capture',
+    app: 'Preview',
+    user: 'User opens a PDF lecture slide deck saved to ~/Downloads',
+    system: '<strong>FSEvents file watcher</strong> fires on file open. Reads first 2000 chars via PyMuPDF subprocess, stores with source_type=file and the full file path. Index updated within 30 min.',
+    time: '11:05 AM'
+  },
+  {
+    badge: 'filter', badgeLabel: 'Noise filtered',
+    app: 'Netflix',
+    user: 'User opens Netflix and watches a YouTube video during lunch',
+    system: '<strong>Noise classifier</strong> fires: app=Netflix + low text density + window title contains "Netflix" → is_noise=1. Row is written but excluded from FAISS index. Does not pollute search.',
+    time: '12:20 PM'
+  },
+  {
+    badge: 'capture', badgeLabel: 'Passive capture',
+    app: 'Notion',
+    user: 'User writes notes on a lecture about transformer architectures',
+    system: 'AX API extracts the Notion page text. High content density, long dwell time → noise score 0.04. Embedding model encodes the note. <strong>Cosine similarity to arXiv paper: 0.87</strong> — they cluster together in the index.',
+    time: '2:45 PM'
+  },
+  {
+    badge: 'capture', badgeLabel: 'Index grows',
+    app: 'System',
+    user: '3 days pass. Normal computer usage continues.',
+    system: 'FAISS index now contains <strong>4,200 memories</strong>. Background job runs every 30 minutes to encode new captures and update the index. Temporal re-ranker has logged 60+ user dwell events for training.',
+    time: '3 days later',
+    isBanner: true
+  },
+  {
+    badge: 'search', badgeLabel: 'Search',
+    app: 'Web UI',
+    user: 'User opens MemoryOS web app and types: "that transformer paper I read last week"',
+    system: 'FastAPI encodes the query → FAISS returns top 50 candidates → re-ranker scores by <strong>similarity + recency + dwell time</strong> → top 10 returned in <strong>82ms</strong>.',
+    time: null
+  },
+  {
+    badge: 'result', badgeLabel: 'Result',
+    app: 'Web UI',
+    user: 'Top result: "Attention Is All You Need" — Safari · arxiv.org · 4 days ago · similarity 0.91',
+    system: 'User clicks the result. MemoryOS calls <strong>open(url)</strong> via the Mac app. Safari opens directly to the paper. The click is logged as a positive label for re-ranker fine-tuning.',
+    time: null
+  }
+];
+
+let current = 0;
+
+function render() {
+  const container = document.getElementById('steps-container');
+  const s = steps[current];
+
+  let html = '';
+
+  if (s.time && !s.isBanner) {
+    html += `<div class="time-banner">⏱ ${s.time}</div>`;
+  }
+  if (s.isBanner) {
+    html += `<div class="time-banner">📅 ${s.time}</div>`;
+  }
+
+  html += `<div class="step-card active">
+    <div class="step-header">
+      <span class="step-badge badge-${s.badge}">${s.badgeLabel}</span>
+      <span class="step-app">${s.app}</span>
+    </div>
+    <div class="step-user">${s.user}</div>
+    <div class="step-system">${s.system}</div>
+  </div>`;
+
+  container.innerHTML = html;
+
+  document.getElementById('progress').textContent = `Step ${current + 1} of ${steps.length}`;
+  document.getElementById('prev').disabled = current === 0;
+  document.getElementById('next').disabled = current === steps.length - 1;
+
+  const dots = document.getElementById('dots');
+  dots.innerHTML = steps.map((_, i) => `<div class="dot ${i === current ? 'active' : ''}"></div>`).join('');
+}
+
+function go(dir) {
+  current = Math.max(0, Math.min(steps.length - 1, current + dir));
+  render();
+}
+
+render();
+</script>

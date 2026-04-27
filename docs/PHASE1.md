@@ -4,17 +4,9 @@ This folder now contains the first-pass data capture layer:
 
 - `daemon/`: Swift Package executable for local macOS capture.
 - `extension/`: Chrome Manifest V3 extension that captures page title, URL, and visible text after 45 seconds.
-- Browser capture now posts directly to the FastAPI backend at `POST /capture/browser`.
+- `scripts/browser_ingest_server.py`: local browser capture endpoint that writes to the same SQLite database.
 
-For normal setup, run the full installer from the repository root:
-
-```sh
-scripts/install_memoryos.sh
-```
-
-It builds and installs the daemon launch agent, menu bar app, backend, web UI, and scheduler.
-
-## Run the Swift daemon for debugging
+## Run the Swift daemon
 
 ```sh
 cd daemon
@@ -46,9 +38,15 @@ Override it with:
 MEMORYOS_DB=/tmp/memoryos.db swift run memoryos-daemon
 ```
 
-## Browser Capture
+## Run browser ingest
 
-Keep the FastAPI backend running at `http://127.0.0.1:8765`, then load the unpacked extension from `extension/` in Chrome. The extension posts page captures to `POST /capture/browser` after the dwell threshold.
+In a second terminal:
+
+```sh
+python3 scripts/browser_ingest_server.py
+```
+
+Then load the unpacked extension from `extension/` in Chrome.
 
 ## Validate captures
 

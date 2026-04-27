@@ -34,3 +34,9 @@ ml/models/*
 !ml/data/raw/.gitkeep
 !ml/data/processed/.gitkeep
 !ml/models/.gitkeep
+
+# Local deploy/build workspaces
+netlify-memoryos-page/.netlify/
+presentation-workspace/node_modules/
+presentation-workspace/output/
+presentation-workspace/scratch/

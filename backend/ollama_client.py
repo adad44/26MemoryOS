@@ -22,7 +22,7 @@ def is_ollama_running() -> bool:
 
 def generate(prompt: str, system: str = "", temperature: float = 0.2) -> Optional[str]:
     if not is_ollama_running():
-        raise RuntimeError("Ollama is not running. Start it with: brew services start ollama")
+        raise RuntimeError("Ollama is not running. Start it with: ollama serve")
 
     payload = {
         "model": MODEL,

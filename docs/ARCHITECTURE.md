@@ -155,7 +155,7 @@ flowchart LR
 - Backend services bind to `127.0.0.1`.
 - Captures are stored locally by default.
 - Sensitive apps and domains are blocked early.
-- The future menu bar app should expose pause/resume and forget controls.
+- The menu bar app exposes pause/resume, search, status refresh, index refresh, settings, and permission onboarding.
 - Privacy settings are stored locally in `~/Library/Application Support/MemoryOS/privacy.json`.
 - Export and forget/delete controls are served by the local backend.
 
@@ -163,8 +163,8 @@ flowchart LR
 
 - macOS with matching Xcode or Command Line Tools.
 - Swift compiler for the daemon.
-- Python 3.11+ for scripts and future ML work.
-- Node 18+ for future web work.
+- Python 3.10+ for backend, scripts, local search, and user-model jobs.
+- Node 18+ for the React web UI.
 
 ## Packaging
 

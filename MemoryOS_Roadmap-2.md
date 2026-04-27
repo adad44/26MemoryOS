@@ -1,5 +1,7 @@
 # MemoryOS — Complete Project Roadmap
 
+> Historical planning document. For current implemented behavior, use `README.md`, `docs/QUICKSTART.md`, and the phase docs under `docs/`.
+
 ML-powered personal knowledge engine for macOS \+ Web  
 Stack: Swift · Python · PyTorch · FAISS · FastAPI · React
 
@@ -638,7 +640,7 @@ struct MemoryOSApp: App {
 
     var body: some Scene {
 
-        MenuBarExtra("MemoryOS", systemImage: "brain") {
+        MemoryOS menu bar item with the outline-only circuit-brain mark {
 
             MenuBarView()
 
@@ -682,12 +684,12 @@ struct MenuBarView: View {
 
 **Tasks:**
 
-- [ ] Menu bar icon (brain icon, or custom SF Symbol)  
-- [ ] Show/hide: "Capturing" vs "Paused" state  
-- [ ] Quick stats: "1,247 memories indexed"  
-- [ ] "Open Search" button → opens Netlify URL in browser  
-- [ ] "Pause" toggle for when you want privacy  
-- [ ] Launch at login (add to Login Items)
+- [x] Menu bar icon using the outline-only MemoryOS circuit-brain mark
+- [x] Show/hide: "Capturing" vs "Paused" state
+- [x] Quick stats: capture count, index readiness, latest capture, and active/paused state
+- [x] "Open Search" button opens the local web UI
+- [x] "Pause" toggle for private moments
+- [x] Launch at login through LaunchAgents
 
 ### 5.2 Daemon Packaging
 
@@ -715,7 +717,7 @@ struct MenuBarView: View {
 ### 6.3 Documentation
 
 - [ ] README with architecture diagram, setup instructions, screenshots  
-- [ ] Demo video: 60–90 seconds showing a real search  
+- [ ] Demo video: optional launch asset; not currently published on the Netlify landing page
 - [ ] Blog post / write-up explaining the ML decisions (great for PM/AI roles)
 
 ### 6.4 Portfolio Packaging
@@ -751,4 +753,3 @@ struct MenuBarView: View {
 | 14 | Portfolio ready | README, demo video, blog post complete |
 
 ---
-

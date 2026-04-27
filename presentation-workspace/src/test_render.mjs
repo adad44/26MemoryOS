@@ -1,0 +1,10 @@
+const { Presentation, PresentationFile, column, text, fill, hug, drawSlideToCtx } = await import('@oai/artifact-tool');
+const { Canvas } = await import('../node_modules/@oai/artifact-tool/node_modules/skia-canvas/lib/index.js');
+const pres = Presentation.create({ slideSize: { width: 1920, height: 1080 } });
+const slide = pres.slides.add();
+slide.compose(column({width:fill,height:fill,padding:80},[text('Hello',{width:fill,height:hug,style:{fontSize:80}})]),{frame:{left:0,top:0,width:1920,height:1080},baseUnit:8});
+const canvas = new Canvas(1920,1080);
+const ctx = canvas.getContext('2d');
+await drawSlideToCtx(slide,pres,ctx);
+await canvas.saveAs('presentation-workspace/scratch/test.png');
+const blob = await PresentationFile.exportPptx(pres); await blob.save('presentation-workspace/output/test.pptx');

@@ -1,18 +1,8 @@
 # Phase 5 Mac Menu Bar App
 
-Phase 5 adds a SwiftUI menu bar app and launch-agent packaging for login startup.
+Phase 5 adds a compact macOS menu bar app and launch-agent packaging for login startup.
 
-## Install
-
-Normal users should run:
-
-```sh
-scripts/install_memoryos.sh
-```
-
-That builds the daemon and menu bar app, copies MemoryOS into `~/Library/Application Support/MemoryOS/app`, and registers launch agents.
-
-## Build For Debugging
+## Build
 
 Build the daemon:
 
@@ -32,9 +22,9 @@ Output:
 menubar/dist/MemoryOS.app
 ```
 
-## Run For Debugging
+## Run
 
-Start the backend and web UI first, unless you already used the installer:
+Start the backend and web UI first:
 
 ```sh
 scripts/run_backend.sh
@@ -47,6 +37,12 @@ Open the menu bar app:
 open menubar/dist/MemoryOS.app
 ```
 
+The normal installer builds and opens this app automatically:
+
+```sh
+scripts/install_memoryos.sh
+```
+
 ## Menu Bar Controls
 
 - Backend status.
@@ -54,7 +50,9 @@ open menubar/dist/MemoryOS.app
 - Index readiness.
 - Latest capture timestamp.
 - Capture active/paused state.
-- Setup panel for macOS permissions.
+- Compact hosted MemoryOS dropdown panel.
+- Outline-only MemoryOS circuit-brain menu bar icon.
+- Setup panel for macOS permissions, hidden by default until opened.
 - Accessibility status and shortcut to the Accessibility privacy pane.
 - Full Disk Access review shortcut for file capture.
 - Screen Recording fallback status and request action.
@@ -85,8 +83,6 @@ The Swift daemon checks this flag before saving Accessibility and file captures.
 
 ## Launch Agents
 
-The one-command installer handles all launch agents. Individual commands are available for debugging.
-
 Install daemon launch at login:
 
 ```sh
@@ -99,18 +95,6 @@ Install backend launch at login:
 scripts/install_backend_launch_agent.sh
 ```
 
-Install web UI launch at login:
-
-```sh
-scripts/install_web_launch_agent.sh
-```
-
-Install scheduler launch at login:
-
-```sh
-scripts/install_scheduler_launch_agent.sh
-```
-
 Uninstall daemon launch agent:
 
 ```sh
@@ -121,18 +105,6 @@ Uninstall backend launch agent:
 
 ```sh
 scripts/uninstall_backend_launch_agent.sh
-```
-
-Uninstall web UI launch agent:
-
-```sh
-scripts/uninstall_web_launch_agent.sh
-```
-
-Uninstall scheduler launch agent:
-
-```sh
-scripts/uninstall_scheduler_launch_agent.sh
 ```
 
 Install menu bar launch at login:
@@ -152,8 +124,6 @@ The plist files are written to:
 ```text
 ~/Library/LaunchAgents/com.memoryos.daemon.plist
 ~/Library/LaunchAgents/com.memoryos.backend.plist
-~/Library/LaunchAgents/com.memoryos.web.plist
-~/Library/LaunchAgents/com.memoryos.scheduler.plist
 ~/Library/LaunchAgents/com.memoryos.menubar.plist
 ```
 
@@ -161,4 +131,4 @@ The plist files are written to:
 
 The menu bar app is packaged with `LSUIElement=true`, so it runs as a menu bar utility instead of a normal Dock app.
 
-The local Swift Package Manager manifest path is present for future Xcode/SPM workflows, but `scripts/build_menubar.sh` uses direct `swiftc` compilation because the local Command Line Tools SwiftPM manifest linker is unreliable on this machine.
+`scripts/build_menubar.sh` uses direct `swiftc` compilation and copies `menubar/Assets/memoryos-menubar-logo.svg` into the app bundle so the menu bar icon matches the public MemoryOS brand mark without the dark square background.

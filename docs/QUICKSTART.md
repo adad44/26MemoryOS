@@ -60,16 +60,16 @@ The parts that may take longer than five minutes on a cold machine are downloadi
 If you are using an AI coding agent, point it at this repository and paste this:
 
 ```text
-You are in the MemoryOS repository. Run scripts/install_memoryos.sh, then verify http://127.0.0.1:8765/health and http://127.0.0.1:5173. Do not delete local data unless I explicitly ask.
+You are in the MemoryOS repository. Read README.md and docs/QUICKSTART.md, then run scripts/install_memoryos.sh. Verify the backend at http://127.0.0.1:8765/health and the web UI at http://127.0.0.1:5173. Do not delete local data unless I explicitly ask.
 ```
 
 If the agent is outside the repo, include the folder path:
 
 ```text
-Go to /path/to/memoryos and run scripts/install_memoryos.sh.
+Go to /path/to/memoryos, read README.md and docs/QUICKSTART.md, then run the local MemoryOS quickstart.
 ```
 
-The installer registers launch agents for the backend and web UI. The agent should not start separate dev servers unless it is intentionally debugging the app.
+The agent should use separate terminals or background processes for the backend and web UI.
 
 For a full explanation of every web UI tab and setting, read [WEB_UI_GUIDE.md](WEB_UI_GUIDE.md).
 
@@ -94,17 +94,13 @@ xcode-select --install
 If you have not cloned it yet:
 
 ```sh
-git clone https://github.com/adad44/MemoryOS.git memoryos
+git clone <repo-url> memoryos
 cd memoryos
 ```
 
 If you already have it, open a terminal in the folder that contains `README.md`.
 
-## Manual Debug Setup
-
-The commands below are for debugging or development only. New users should use `scripts/install_memoryos.sh`.
-
-### Install Python Dependencies
+## 2. Install Python Dependencies
 
 Skip this section if you already used `scripts/install_memoryos.sh`.
 
@@ -123,7 +119,7 @@ For optional sentence-transformer/FAISS search or training tools:
 python3 -m pip install -r ml/requirements.txt
 ```
 
-### Start The Backend
+## 3. Start The Backend
 
 Keep this terminal open:
 
@@ -151,7 +147,7 @@ Expected response:
 
 For the simplest local setup, leave `MEMORYOS_API_KEY` unset.
 
-### Start The Web UI
+## 4. Start The Web UI
 
 Open a new terminal from the repository root:
 
@@ -169,7 +165,7 @@ http://127.0.0.1:5173
 
 If port `5173` is already busy, Vite may choose another port such as `5174`.
 
-## 2. Add One Test Capture
+## 5. Add One Test Capture
 
 Before turning on real capture, add one fake capture so you can verify the full flow:
 
@@ -181,7 +177,7 @@ curl -X POST http://127.0.0.1:8765/capture/browser \
 
 Open the web UI and check the Recent tab. You should see the test capture.
 
-## 3. Build The Search Index
+## 6. Build The Search Index
 
 From the terminal:
 
@@ -196,7 +192,7 @@ Or use the web UI:
 1. Open the Stats tab.
 2. Click Reindex.
 
-## 4. Search
+## 7. Search
 
 From the terminal:
 
@@ -210,7 +206,7 @@ Or use the Search tab in the web UI.
 
 If search returns `409`, it means the index has not been built yet. Run the Reindex step again after you have at least one capture.
 
-## 5. Pin, Review, And Track Follow-Ups
+## 8. Pin, Review, And Track Follow-Ups
 
 Use the web UI to manage memories after search starts working:
 
@@ -222,20 +218,22 @@ Use the web UI to manage memories after search starts working:
 
 These features are local-first. They use the same SQLite database as captures and do not require a cloud account.
 
-Manual local user model run:
+Optional local user model setup:
 
 ```sh
+ollama pull mistral
+ollama serve
 python3 backend/db_phase7.py
 python3 backend/abstraction_engine.py
 ```
 
-The one-command installer starts Ollama, pulls `mistral`, and installs the 6-hour scheduler automatically unless you pass skip flags. For manual debugging, run:
+For the 6-hour scheduler:
 
 ```sh
 scripts/start_scheduler.sh
 ```
 
-## 6. Label Captures The Easy Way
+## 9. Label Captures The Easy Way
 
 Open the Label tab in the web UI.
 

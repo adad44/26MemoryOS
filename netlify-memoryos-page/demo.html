@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MemoryOS Demo</title>
+    <link rel="icon" href="assets/memoryos-logo.svg" type="image/svg+xml" />
+    <meta
+      name="description"
+      content="Try a static MemoryOS demo with local-style search, capture labeling, and privacy controls."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #0d141c;
+        --paper: #eef3f5;
+        --panel: #ffffff;
+        --muted: #5e6a75;
+        --line: #d5e0e5;
+        --dark: #08111d;
+        --teal: #5fd3bd;
+        --teal-dark: #1d6e62;
+        --rust: #a9552c;
+        --signal: #ba842e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .brand-mark {
+        display: inline-grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border: 1px solid var(--ink);
+        background: var(--dark);
+        color: #ffffff;
+        box-shadow: inset 0 -8px 0 rgb(255 255 255 / 0.08);
+      }
+
+      .brand-mark svg {
+        width: 23px;
+        height: 23px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .topbar {
+        border-bottom: 1px solid var(--line);
+        background: #ffffff;
+      }
+
+      .topbar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        width: min(1240px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 16px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 900;
+        text-decoration: none;
+      }
+
+      .top-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .top-actions a,
+      .control-button {
+        display: inline-flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: #263541;
+        font-size: 14px;
+        font-weight: 800;
+        padding: 9px 12px;
+        text-decoration: none;
+      }
+
+      .top-actions a.primary,
+      .control-button.primary {
+        border-color: var(--dark);
+        background: var(--dark);
+        color: #ffffff;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 230px minmax(0, 1fr);
+        gap: 18px;
+        width: min(1240px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 20px 0 34px;
+      }
+
+      .sidebar,
+      .workspace,
+      .panel,
+      .capture-card,
+      .metric,
+      .privacy-card {
+        border: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .sidebar {
+        height: fit-content;
+        padding: 10px;
+      }
+
+      .nav-button {
+        display: flex;
+        width: 100%;
+        height: 42px;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: #536170;
+        font-size: 14px;
+        font-weight: 750;
+        padding: 0 10px;
+        text-align: left;
+      }
+
+      .nav-button.active {
+        border-color: var(--line);
+        background: #f3f6f8;
+        color: var(--ink);
+      }
+
+      .nav-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 22px;
+        color: #40505b;
+      }
+
+      .nav-icon svg {
+        width: 17px;
+        height: 17px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .workspace {
+        min-width: 0;
+      }
+
+      .workspace-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding: 20px;
+      }
+
+      .eyebrow {
+        color: var(--teal-dark);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin-top: 6px;
+        font-size: clamp(34px, 5vw, 58px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .header-copy {
+        margin-top: 12px;
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+      }
+
+      .status-stack {
+        display: grid;
+        gap: 8px;
+        min-width: 220px;
+      }
+
+      .status-pill {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border: 1px solid var(--line);
+        background: #f8fbfc;
+        color: #40505b;
+        font-size: 13px;
+        font-weight: 800;
+        padding: 9px 10px;
+      }
+
+      .status-pill strong {
+        color: var(--ink);
+      }
+
+      .demo-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+        gap: 18px;
+        padding: 18px;
+      }
+
+      .panel {
+        min-width: 0;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--line);
+        padding: 16px;
+      }
+
+      .panel-title {
+        font-size: 17px;
+        font-weight: 900;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .search-area {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+      }
+
+      .search-row {
+        position: relative;
+        min-width: 0;
+      }
+
+      .search-input {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        height: 48px;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: var(--ink);
+        font-size: 16px;
+        padding: 0 14px;
+      }
+
+      .search-input[readonly] {
+        cursor: default;
+        user-select: none;
+      }
+
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .filter-button,
+      .label-button {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: #40505b;
+        font-size: 13px;
+        font-weight: 850;
+        padding: 8px 10px;
+      }
+
+      .filter-button.active,
+      .label-button.keep.active {
+        border-color: #a7d8ce;
+        background: #eaf8f4;
+        color: var(--teal-dark);
+      }
+
+      .label-button.noise.active {
+        border-color: #efc7b2;
+        background: #fff2eb;
+        color: var(--rust);
+      }
+
+      .results {
+        display: grid;
+        gap: 10px;
+      }
+
+      .capture-card {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        text-align: left;
+      }
+
+      .capture-card.selected {
+        border-color: #8ccfc2;
+        box-shadow: 0 0 0 3px rgb(95 211 189 / 0.18);
+      }
+
+      .capture-top {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      .capture-title {
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .capture-meta {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .tag {
+        border: 1px solid var(--line);
+        background: #f6f9fa;
+        color: #40505b;
+        font-size: 12px;
+        font-weight: 800;
+        padding: 5px 7px;
+      }
+
+      .score {
+        border: 1px solid #c8ddd8;
+        background: #effaf7;
+        color: var(--teal-dark);
+        font-size: 12px;
+        font-weight: 900;
+        padding: 5px 7px;
+        white-space: nowrap;
+      }
+
+      .detail-body {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .detail-title {
+        font-size: 22px;
+        line-height: 1.1;
+        font-weight: 950;
+      }
+
+      .snippet {
+        border-left: 3px solid var(--teal);
+        background: #f6fbfa;
+        color: #354652;
+        font-size: 15px;
+        line-height: 1.6;
+        padding: 12px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric {
+        min-width: 0;
+        padding: 12px;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .metric-value {
+        margin-top: 5px;
+        font-size: 22px;
+        font-weight: 950;
+      }
+
+      .privacy-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .privacy-card {
+        padding: 12px;
+      }
+
+      .privacy-card h3 {
+        font-size: 15px;
+        line-height: 1.25;
+      }
+
+      .privacy-card p {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .activity-log {
+        display: grid;
+        gap: 8px;
+      }
+
+      .activity-item {
+        border: 1px solid var(--line);
+        background: #f8fbfc;
+        color: #40505b;
+        font-size: 13px;
+        line-height: 1.4;
+        padding: 9px 10px;
+      }
+
+      .empty {
+        border: 1px dashed #b8c8cf;
+        color: var(--muted);
+        padding: 20px;
+        text-align: center;
+      }
+
+      @media (max-width: 1080px) {
+        .demo-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 860px) {
+        .shell,
+        .demo-layout,
+        .workspace-header {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+        }
+
+        .sidebar nav {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 6px;
+        }
+
+        .nav-button {
+          justify-content: center;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .topbar-inner,
+        .shell {
+          width: min(100% - 24px, 620px);
+        }
+
+        .topbar-inner,
+        .top-actions,
+        .capture-top {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar nav {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .nav-button {
+          justify-content: flex-start;
+        }
+
+        .workspace-header,
+        .demo-layout {
+          padding: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a aria-label='MemoryOS home' class='brand' href='/'>
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M9 13a4.5 4.5 0 0 0 3-4"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M12 13h4"/><path d="M12 18h6a2 2 0 0 1 2 2v1"/><path d="M12 8h8"/><path d="M16 8V5a2 2 0 0 1 2-2"/><circle cx="16" cy="13" r=".5"/><circle cx="18" cy="3" r=".5"/><circle cx="20" cy="21" r=".5"/><circle cx="20" cy="8" r=".5"/></svg>
+          </span>
+          MemoryOS
+        </a>
+        <div class="top-actions">
+          <a href='/'>Overview</a>
+          <a class='primary' href='/#install'>Install locally</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="sidebar" aria-label="Demo navigation">
+        <nav>
+          <button class="nav-button active" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span> Search</button>
+          <button class="nav-button" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/><path d="M12 7v5l3 2"/></svg></span> Recent</button>
+          <button class="nav-button" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5-8 4.5-8-4.5Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg></span> Collections</button>
+          <button class="nav-button" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg></span> Privacy</button>
+          <button class="nav-button" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M12 9v9"/><path d="M17 12v6"/></svg></span> Stats</button>
+          <button class="nav-button" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-.5 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 .5-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 .5 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.23.35.43.7.6 1H20a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-.5 1Z"/></svg></span> Settings</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <section class="workspace-header" aria-labelledby="demo-heading">
+          <div>
+            <div class="eyebrow">Static product demo</div>
+            <h1 id="demo-heading">Search a local memory layer.</h1>
+            <p class="header-copy">
+              This demo uses mock captures to show the MemoryOS workflow: search local context, inspect the capture, label what matters, and keep noisy records out of your personal index.
+            </p>
+          </div>
+          <div class="status-stack" aria-label="Demo status">
+            <div class="status-pill"><span>Backend</span><strong>Demo mode</strong></div>
+            <div class="status-pill"><span>Storage</span><strong>Browser only</strong></div>
+            <div class="status-pill"><span>Network</span><strong>No upload</strong></div>
+          </div>
+        </section>
+
+        <section class="demo-layout">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Memory search</div>
+                <p class="muted" id="result-count">0 captures</p>
+              </div>
+            </div>
+            <div class="search-area">
+              <div class="search-row">
+                <label class="muted" for="search-input">Query</label>
+                <input
+                  class="search-input"
+                  id="search-input"
+                  type="search"
+                  value="What was I doing yesterday at 9 PM?"
+                  readonly
+                  aria-readonly="true"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="filters" aria-label="Capture filters">
+                <button class="filter-button active" type="button" data-filter="all">All</button>
+                <button class="filter-button" type="button" data-filter="keep">Keep</button>
+                <button class="filter-button" type="button" data-filter="unlabeled">Unlabeled</button>
+                <button class="filter-button" type="button" data-filter="noise">Noise</button>
+              </div>
+              <div class="results" id="results" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <aside class="panel">
+            <div class="panel-header">
+              <div class="panel-title">Selected capture</div>
+              <span class="score" id="selected-score">score 0.00</span>
+            </div>
+            <div class="detail-body">
+              <div>
+                <div class="detail-title" id="detail-title"></div>
+                <p class="capture-meta" id="detail-meta"></p>
+              </div>
+              <p class="snippet" id="detail-snippet"></p>
+              <div class="tag-row" id="detail-tags"></div>
+              <div class="filters" aria-label="Label selected capture">
+                <button class="label-button keep" type="button" data-label="keep">Keep</button>
+                <button class="label-button noise" type="button" data-label="noise">Noise</button>
+                <button class="label-button" type="button" data-label="unlabeled">Clear label</button>
+              </div>
+
+              <div class="metrics">
+                <div class="metric">
+                  <div class="metric-label">Captures</div>
+                  <div class="metric-value" id="metric-captures">0</div>
+                </div>
+                <div class="metric">
+                  <div class="metric-label">Keep</div>
+                  <div class="metric-value" id="metric-keep">0</div>
+                </div>
+                <div class="metric">
+                  <div class="metric-label">Noise</div>
+                  <div class="metric-value" id="metric-noise">0</div>
+                </div>
+              </div>
+
+              <div class="privacy-grid">
+                <div class="privacy-card">
+                  <h3>Private by default</h3>
+                  <p>Real MemoryOS stores captures in local SQLite and builds search locally. This hosted demo contains only sample data.</p>
+                </div>
+                <div class="privacy-card">
+                  <h3>Inspectable records</h3>
+                  <p>Search results point back to the app, path, or URL context instead of hiding the data inside a black box.</p>
+                </div>
+              </div>
+
+              <div>
+                <div class="panel-title">Activity</div>
+                <div class="activity-log" id="activity-log"></div>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const originalCaptures = [
+        {
+          id: "cap-yesterday-9pm",
+          title: "Reviewed the MemoryOS launch page",
+          app: "Safari",
+          source: "memoryos-mac.netlify.app",
+          when: "Yesterday 9:00 PM",
+          label: "keep",
+          score: 0.98,
+          tags: ["yesterday", "9pm", "launch", "netlify", "review"],
+          text: "At 9 PM yesterday, you were checking the MemoryOS landing page, reviewing the privacy copy, footer, live demo flow, and install command before the next Netlify deploy."
+        },
+        {
+          id: "cap-react",
+          title: "Fixed the React search state bug",
+          app: "VS Code",
+          source: "web/src/App.tsx",
+          when: "Today 10:42 AM",
+          label: "keep",
+          score: 0.96,
+          tags: ["react", "state", "search", "bug"],
+          text: "The Search tab kept showing stale results after typing. Updated the selected capture state so the detail panel follows the best match as the query changes."
+        },
+        {
+          id: "cap-index",
+          title: "Rebuilt the local search index",
+          app: "MemoryOS Web UI",
+          source: "http://127.0.0.1:5173",
+          when: "Yesterday 6:18 PM",
+          label: "keep",
+          score: 0.91,
+          tags: ["search", "index", "tfidf", "web-ui"],
+          text: "Clicked Reindex after adding new captures. TF-IDF search started returning browser, terminal, and file results again."
+        },
+        {
+          id: "cap-fastapi",
+          title: "Added an agent-friendly search endpoint",
+          app: "FastAPI docs",
+          source: "http://127.0.0.1:8765/docs",
+          when: "Yesterday 2:05 PM",
+          label: "unlabeled",
+          score: 0.85,
+          tags: ["agent", "api", "search", "fastapi"],
+          text: "Reviewed POST /search and GET /recent so a coding agent can ask MemoryOS for local context without reading the SQLite database directly."
+        },
+        {
+          id: "cap-netlify",
+          title: "Deployed the public product demo",
+          app: "Safari",
+          source: "memoryos-mac.netlify.app",
+          when: "Apr 25, 8:02 PM",
+          label: "keep",
+          score: 0.82,
+          tags: ["demo", "netlify", "landing", "deploy"],
+          text: "Published a browser-only demo that shows search, selected capture details, labels, and local privacy status without requiring installation."
+        },
+        {
+          id: "cap-menubar",
+          title: "Menu bar pause capture control",
+          app: "MemoryOS menu bar",
+          source: "menubar/Sources/MemoryOSMenuBar",
+          when: "Apr 25, 4:33 PM",
+          label: "unlabeled",
+          score: 0.74,
+          tags: ["macos", "menubar", "privacy", "capture"],
+          text: "Verified the menu bar app can show backend status, open the web UI, refresh the index, and pause capture when the user wants a private moment."
+        },
+        {
+          id: "cap-ollama",
+          title: "Local user model run",
+          app: "Terminal",
+          source: "backend/abstraction_engine.py",
+          when: "Apr 25, 1:12 PM",
+          label: "unlabeled",
+          score: 0.69,
+          tags: ["ollama", "mistral", "user-model", "local-llm"],
+          text: "Ran the abstraction job against recent non-noise captures. The local model summarized active projects and knowledge gaps for the You tab."
+        },
+        {
+          id: "cap-extension",
+          title: "Captured a useful browser page",
+          app: "Chrome",
+          source: "localhost docs tab",
+          when: "Apr 24, 5:47 PM",
+          label: "keep",
+          score: 0.66,
+          tags: ["browser", "extension", "capture", "docs"],
+          text: "Saved a documentation page through the Chrome extension so it could show up later beside terminal and app-window captures."
+        },
+        {
+          id: "cap-noise",
+          title: "Ignored temporary build output",
+          app: "Terminal",
+          source: "web/node_modules/.vite",
+          when: "Apr 25, 11:19 AM",
+          label: "noise",
+          score: 0.31,
+          tags: ["cache", "temporary", "vite"],
+          text: "Vite refreshed a dependency cache during local development. Marked as Noise so it does not crowd out useful captures."
+        }
+      ];
+
+      let captures = originalCaptures.map((capture) => ({ ...capture }));
+      let activeFilter = "all";
+      let selectedId = captures[0].id;
+
+      const searchInput = document.getElementById("search-input");
+      const results = document.getElementById("results");
+      const resultCount = document.getElementById("result-count");
+      const detailTitle = document.getElementById("detail-title");
+      const detailMeta = document.getElementById("detail-meta");
+      const detailSnippet = document.getElementById("detail-snippet");
+      const detailTags = document.getElementById("detail-tags");
+      const selectedScore = document.getElementById("selected-score");
+      const activityLog = document.getElementById("activity-log");
+      const metricCaptures = document.getElementById("metric-captures");
+      const metricKeep = document.getElementById("metric-keep");
+      const metricNoise = document.getElementById("metric-noise");
+
+      const events = ["Demo loaded with sample local captures."];
+
+      function normalize(value) {
+        return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      }
+
+      function scoreCapture(capture, query) {
+        if (!query) return capture.score;
+        const haystack = normalize([capture.title, capture.app, capture.source, capture.text, capture.tags.join(" ")].join(" "));
+        const terms = normalize(query).split(/\s+/).filter(Boolean);
+        const hits = terms.filter((term) => haystack.includes(term)).length;
+        return Math.min(0.99, Math.max(0.12, capture.score * 0.55 + (hits / Math.max(terms.length, 1)) * 0.44));
+      }
+
+      function filteredCaptures() {
+        const query = searchInput.value;
+        return captures
+          .map((capture) => ({ ...capture, computedScore: scoreCapture(capture, query) }))
+          .filter((capture) => activeFilter === "all" || capture.label === activeFilter)
+          .filter((capture) => !query.trim() || capture.computedScore > 0.28)
+          .sort((a, b) => b.computedScore - a.computedScore);
+      }
+
+      function labelName(label) {
+        if (label === "keep") return "Keep";
+        if (label === "noise") return "Noise";
+        return "Unlabeled";
+      }
+
+      function renderResults() {
+        const list = filteredCaptures();
+        resultCount.textContent = `${list.length} capture${list.length === 1 ? "" : "s"}`;
+        if (!list.some((capture) => capture.id === selectedId) && list.length) {
+          selectedId = list[0].id;
+        }
+        results.innerHTML = "";
+        if (!list.length) {
+          results.innerHTML = '<div class="empty">No demo captures match this query.</div>';
+          renderDetail();
+          return;
+        }
+        list.forEach((capture) => {
+          const button = document.createElement("button");
+          button.className = `capture-card${capture.id === selectedId ? " selected" : ""}`;
+          button.type = "button";
+          button.innerHTML = `
+            <div class="capture-top">
+              <div>
+                <div class="capture-title">${capture.title}</div>
+                <div class="capture-meta">${capture.app} / ${capture.source} / ${capture.when}</div>
+              </div>
+              <span class="score">score ${capture.computedScore.toFixed(2)}</span>
+            </div>
+            <p class="capture-meta">${capture.text}</p>
+            <div class="tag-row">
+              <span class="tag">${labelName(capture.label)}</span>
+              ${capture.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
+            </div>
+          `;
+          button.addEventListener("click", () => {
+            selectedId = capture.id;
+            events.unshift(`Opened capture: ${capture.title}`);
+            render();
+          });
+          results.appendChild(button);
+        });
+        renderDetail();
+      }
+
+      function selectedCapture() {
+        return captures.find((capture) => capture.id === selectedId) || filteredCaptures()[0] || captures[0];
+      }
+
+      function renderDetail() {
+        const capture = selectedCapture();
+        const score = scoreCapture(capture, searchInput.value);
+        detailTitle.textContent = capture.title;
+        detailMeta.textContent = `${capture.app} / ${capture.source} / ${capture.when}`;
+        detailSnippet.textContent = capture.text;
+        selectedScore.textContent = `score ${score.toFixed(2)}`;
+        detailTags.innerHTML = `<span class="tag">${labelName(capture.label)}</span>${capture.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}`;
+        document.querySelectorAll(".label-button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.label === capture.label);
+        });
+      }
+
+      function renderMetrics() {
+        metricCaptures.textContent = captures.length;
+        metricKeep.textContent = captures.filter((capture) => capture.label === "keep").length;
+        metricNoise.textContent = captures.filter((capture) => capture.label === "noise").length;
+      }
+
+      function renderActivity() {
+        activityLog.innerHTML = events.slice(0, 5).map((event) => `<div class="activity-item">${event}</div>`).join("");
+      }
+
+      function render() {
+        document.querySelectorAll(".filter-button").forEach((button) => {
+          button.classList.toggle("active", button.dataset.filter === activeFilter);
+        });
+        renderResults();
+        renderMetrics();
+        renderActivity();
+      }
+
+      searchInput.addEventListener("input", () => {
+        events.unshift(`Searched: ${searchInput.value || "all captures"}`);
+        const firstMatch = filteredCaptures()[0];
+        if (firstMatch) selectedId = firstMatch.id;
+        render();
+      });
+
+      document.querySelectorAll(".filter-button").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeFilter = button.dataset.filter;
+          events.unshift(`Filtered captures: ${button.textContent}`);
+          render();
+        });
+      });
+
+      document.querySelectorAll(".label-button").forEach((button) => {
+        button.addEventListener("click", () => {
+          const capture = selectedCapture();
+          capture.label = button.dataset.label;
+          events.unshift(`Labeled "${capture.title}" as ${labelName(capture.label)}.`);
+          render();
+        });
+      });
+
+      render();
+    </script>
+  </body>
+</html>

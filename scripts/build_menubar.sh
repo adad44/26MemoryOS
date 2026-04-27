@@ -19,6 +19,7 @@ swiftc \
 rm -rf "$APP_DIR"
 mkdir -p "$BIN_DIR" "$RES_DIR"
 cp "$ROOT/menubar/.build/release/memoryos-menubar" "$BIN_DIR/MemoryOS"
+cp "$ROOT/menubar/Assets/memoryos-menubar-logo.svg" "$RES_DIR/memoryos-menubar-logo.svg"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

@@ -375,7 +375,7 @@ Web UI:  $WEB_STATUS
 Model:   $MODEL
 
 Next:
-1. Open the MemoryOS brain icon in the macOS menu bar.
+1. Open the MemoryOS icon in the macOS menu bar.
 2. Grant Accessibility and Full Disk Access when prompted.
 3. Open the web UI and use Stats -> Reindex after captures arrive.
 

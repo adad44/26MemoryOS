@@ -135,10 +135,10 @@ export default function UserModel({
           <BrainCircuit className="mx-auto text-slate-400" size={34} />
           <div className="mt-3 font-medium text-ink">No user model yet</div>
           <div className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">
-            Run the installer or make sure local Ollama/Mistral is available, then run abstraction. The backend will store
+            Start Ollama locally, make sure the `mistral` model is available, then run abstraction. The backend will store
             beliefs and a summary locally in SQLite.
           </div>
-          <code className="mt-3 inline-block border border-line bg-panel px-3 py-2 text-xs text-slate-700">scripts/install_memoryos.sh</code>
+          <code className="mt-3 inline-block border border-line bg-panel px-3 py-2 text-xs text-slate-700">ollama serve</code>
         </section>
       )}
 

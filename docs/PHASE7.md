@@ -10,8 +10,8 @@ http://localhost:11434
 
 ## Requirements
 
-- Ollama installed locally. The one-command installer handles this through Homebrew.
-- The `mistral` model pulled locally. The installer pulls it unless `--skip-model-pull` is used.
+- Ollama installed locally.
+- The `mistral` model pulled locally.
 - Enough captures for useful extraction. The system still runs with sparse data, but the model improves as MemoryOS collects more context.
 
 Check Ollama:
@@ -39,12 +39,12 @@ user_model
 abstraction_runs
 ```
 
-## Run Once For Debugging
+## Run Once
 
-The installer starts Ollama as a login service. For a manual debug run, make sure Ollama is reachable:
+Start Ollama first:
 
 ```sh
-curl http://localhost:11434/api/tags
+ollama serve
 ```
 
 Then run abstraction:
@@ -59,7 +59,7 @@ The Ollama client requests JSON output and allows up to 300 seconds by default b
 
 ## Run Every 6 Hours
 
-The one-command installer registers `com.memoryos.scheduler`. For a foreground debug run:
+Use the scheduler:
 
 ```sh
 scripts/start_scheduler.sh

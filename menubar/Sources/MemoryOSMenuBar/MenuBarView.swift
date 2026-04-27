@@ -4,12 +4,12 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject private var client: MemoryOSClient
     @State private var showingSettings = false
-    @State private var showingSetup = true
+    @State private var showingSetup = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             header
-            if showingSetup || client.permissions.needsAttention {
+            if showingSetup {
                 Divider()
                 onboarding
             }
@@ -23,8 +23,8 @@ struct MenuBarView: View {
             Divider()
             footer
         }
-        .padding(14)
-        .frame(width: 360)
+        .padding(12)
+        .frame(width: 320)
         .onAppear {
             client.refreshPermissions()
         }
@@ -32,9 +32,7 @@ struct MenuBarView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "brain.head.profile")
-                .font(.title2)
-                .foregroundStyle(.primary)
+            MemoryOSLogo(size: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text("MemoryOS")
                     .font(.headline)
@@ -217,7 +215,7 @@ struct MenuBarView: View {
             Spacer()
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
