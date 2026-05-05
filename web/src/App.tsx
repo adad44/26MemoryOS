@@ -62,6 +62,8 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Search }> = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
+const searchExamples = ['what was i doing yesterday at 9am', 'search work from yesterday', 'what did i deploy to netlify'];
+
 function loadConfig(): ClientConfig {
   return {
     baseUrl: localStorage.getItem('memoryos.baseUrl') || DEFAULT_BASE_URL,
@@ -81,6 +83,19 @@ function formatTime(value: string | null) {
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function formatExactTime(value: string | null) {
+  if (!value) return 'unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
@@ -121,7 +136,14 @@ function relativeTime(value: string | null) {
 }
 
 function sourceLabel(capture: CaptureResult) {
-  return [capture.app_name, capture.source_type, relativeTime(capture.timestamp)].join(' / ');
+  return [capture.app_name, capture.source_type].filter(Boolean).join(' / ');
+}
+
+function timestampLabel(value: string | null) {
+  const exactTime = formatExactTime(value);
+  const relative = relativeTime(value);
+  if (exactTime === relative || relative === value) return exactTime;
+  return `${exactTime} (${relative})`;
 }
 
 function openCapture(capture: CaptureResult) {
@@ -468,6 +490,14 @@ function SearchView({ config, onError }: { config: ClientConfig; onError: (value
           />
         </div>
         {loading && <Loader2 className="animate-spin text-signal" size={20} />}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {searchExamples.map((example) => (
+          <button key={example} className="command-button search-example-button" onClick={() => setQuery(example)} type="button">
+            <Clock3 size={14} />
+            {example}
+          </button>
+        ))}
       </div>
       {searchMeta && (
         <div className="flex flex-wrap gap-2 text-xs text-slate-600">
@@ -1579,7 +1609,13 @@ function CaptureCard({
           <h2 className="truncate text-base font-semibold">
             {capture.window_title || capture.url || capture.file_path || `Capture ${capture.id}`}
           </h2>
-          <div className="mt-1 text-sm text-slate-600">{sourceLabel(capture)}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="capture-time-pill">
+              <Clock3 size={14} />
+              <time dateTime={capture.timestamp}>Captured {timestampLabel(capture.timestamp)}</time>
+            </span>
+            <span className="capture-source-pill">{sourceLabel(capture)}</span>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {isPinned && (

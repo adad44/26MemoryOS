@@ -23,6 +23,7 @@ from memoryos.index import (
     FAISS_INDEX_PATH,
     FAISS_MAPPING_PATH,
     INDEX_ARTIFACT_PATH,
+    SearchHit,
     build_index,
     index_backend,
     search_index,
@@ -35,6 +36,7 @@ from .schemas import CleanupResponse
 from .schemas import PrivacySettings
 from .schemas import StoragePolicy
 from .schemas import TodoItem
+from .time_query import TimeQuery, parse_capture_timestamp, parse_time_query, same_day_fallback_score, temporal_score, text_score
 
 
 def row_to_capture_result(
@@ -182,14 +184,25 @@ def auto_noise_label(app_name: str, title: Optional[str], content: str, url: Opt
 
 def search(query: str, top_k: int, candidate_k: int = 50) -> dict:
     started = time.perf_counter()
-    if not INDEX_ARTIFACT_PATH.exists():
+    time_query = parse_time_query(query)
+    if not INDEX_ARTIFACT_PATH.exists() and time_query is None:
         raise FileNotFoundError("Search index is missing. Run /refresh-index or ml/train/build_index.py first.")
     with connect() as conn:
         rows = fetch_captures(conn, non_noise=True)
     rows_by_id = {int(row["id"]): row for row in rows}
     candidate_limit = max(top_k, candidate_k)
-    hits = search_index(query, rows_by_id, top_k=candidate_limit)
-    ranked_hits, reranker_name = rerank_hits(query, hits)
+
+    if time_query is not None:
+        hits = _time_aware_hits(query, rows, rows_by_id, time_query, candidate_limit)
+        ranked_hits = [(hit, hit.score) for hit in hits[:top_k]]
+        reranker_name = "time-aware"
+        backend_name = index_backend() if INDEX_ARTIFACT_PATH.exists() else "missing"
+        backend_name = f"{backend_name}+time"
+    else:
+        hits = search_index(query, rows_by_id, top_k=candidate_limit)
+        ranked_hits, reranker_name = rerank_hits(query, hits)
+        backend_name = index_backend()
+
     results = []
     for rank, (hit, rerank_score) in enumerate(ranked_hits[:top_k], start=1):
         results.append(
@@ -206,9 +219,58 @@ def search(query: str, top_k: int, candidate_k: int = 50) -> dict:
         "results": results,
         "candidate_count": len(hits),
         "elapsed_ms": round(elapsed_ms, 2),
-        "index_backend": index_backend(),
+        "index_backend": backend_name,
         "reranker": reranker_name,
     }
+
+
+def _time_aware_hits(query: str, rows: list[sqlite3.Row], rows_by_id: dict[int, sqlite3.Row], time_query: TimeQuery, top_k: int) -> list[SearchHit]:
+    search_text = time_query.cleaned_query
+    index_scores: dict[int, float] = {}
+    if search_text and INDEX_ARTIFACT_PATH.exists():
+        for hit in search_index(search_text, rows_by_id, top_k=top_k):
+            index_scores[hit.capture_id] = max(index_scores.get(hit.capture_id, 0.0), hit.score)
+
+    hits = _collect_time_hits(rows, time_query, search_text, index_scores, fallback_to_day=False)
+    if not hits and time_query.center_utc is not None:
+        hits = _collect_time_hits(rows, time_query, search_text, index_scores, fallback_to_day=True)
+
+    hits.sort(key=lambda hit: (hit.score, str(hit.row["timestamp"])), reverse=True)
+    return [SearchHit(hit.capture_id, hit.score, rank, hit.row) for rank, hit in enumerate(hits, start=1)]
+
+
+def _collect_time_hits(
+    rows: list[sqlite3.Row],
+    time_query: TimeQuery,
+    search_text: str,
+    index_scores: dict[int, float],
+    fallback_to_day: bool,
+) -> list[SearchHit]:
+    hits = []
+    for row in rows:
+        captured_at = parse_capture_timestamp(str(row["timestamp"]))
+        if captured_at is None:
+            continue
+        proximity = same_day_fallback_score(captured_at, time_query) if fallback_to_day else temporal_score(captured_at, time_query)
+        if proximity <= 0:
+            continue
+
+        capture_id = int(row["id"])
+        lexical = text_score(
+            (
+                row["app_name"],
+                row["window_title"],
+                row["content"],
+                row["source_type"],
+                row["url"],
+                row["file_path"],
+            ),
+            search_text,
+        )
+        semantic = max(index_scores.get(capture_id, 0.0), lexical)
+        score = (0.82 * proximity) + (0.18 * semantic if search_text else 0.0)
+        hits.append(SearchHit(capture_id=capture_id, score=score, rank=0, row=row))
+    return hits
 
 
 def recent(limit: int, app_name: Optional[str] = None, source_type: Optional[str] = None) -> list[CaptureResult]:
