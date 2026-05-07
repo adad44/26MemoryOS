@@ -295,3 +295,138 @@ class OpenCaptureResponse(BaseModel):
 class HealthResponse(BaseModel):
     ok: bool
     api_key_enabled: bool
+
+
+class EnterprisePolicy(BaseModel):
+    id: Optional[int] = None
+    organization_id: int = 1
+    name: str = Field(default="Default enterprise policy", min_length=1, max_length=120)
+    capture_sources: List[str] = Field(default_factory=lambda: ["meeting", "docs", "tickets", "browser", "github", "local_files"])
+    blocked_apps: List[str] = Field(default_factory=list)
+    blocked_domains: List[str] = Field(default_factory=list)
+    excluded_path_fragments: List[str] = Field(default_factory=list)
+    redaction_terms: List[str] = Field(default_factory=list)
+    retention_days: int = Field(default=90, ge=1, le=3650)
+    sync_enabled: bool = True
+    updated_at: Optional[str] = None
+
+
+class OrganizationItem(BaseModel):
+    id: int
+    name: str
+    slug: str
+    created_at: str
+
+
+class UserItem(BaseModel):
+    id: int
+    organization_id: int
+    email: str
+    name: str
+    role: str
+    created_at: str
+
+
+class DeviceItem(BaseModel):
+    id: int
+    user_id: int
+    device_name: str
+    trust_state: str
+    registered_at: str
+    last_seen_at: Optional[str] = None
+
+
+class TeamItem(BaseModel):
+    id: int
+    organization_id: int
+    name: str
+    description: Optional[str] = None
+    member_count: int = 0
+    created_at: str
+
+
+class ProjectItem(BaseModel):
+    id: int
+    team_id: int
+    name: str
+    description: Optional[str] = None
+    status: str
+    member_count: int = 0
+    created_at: str
+
+
+class SharedMemoryItem(BaseModel):
+    id: int
+    capture_id: int
+    organization_id: int
+    team_id: Optional[int] = None
+    project_id: Optional[int] = None
+    shared_by_user_id: Optional[int] = None
+    share_state: str
+    summary: str
+    created_at: str
+    capture: Optional[CaptureResult] = None
+
+
+class AuditEventItem(BaseModel):
+    id: int
+    actor_user_id: Optional[int] = None
+    action: str
+    resource_type: str
+    resource_id: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+    created_at: str
+
+
+class EnterpriseStatus(BaseModel):
+    personal_memory_local: bool
+    enterprise_policy_service: bool
+    identity_and_access: bool
+    team_memory_sync: bool
+    hermes_agent_connector: bool
+    admin_dashboard: bool
+    audit_logs: bool
+    redaction: bool
+    sso_provider: str
+    encryption_scope: str
+    device_trust: str
+
+
+class TeamsOverviewResponse(BaseModel):
+    organization: OrganizationItem
+    users: List[UserItem]
+    devices: List[DeviceItem]
+    teams: List[TeamItem]
+    projects: List[ProjectItem]
+    policy: EnterprisePolicy
+    shared_memories: List[SharedMemoryItem]
+    audit_events: List[AuditEventItem]
+    status: EnterpriseStatus
+
+
+class ShareMemoryRequest(BaseModel):
+    capture_id: int
+    organization_id: int = 1
+    team_id: Optional[int] = None
+    project_id: Optional[int] = None
+    shared_by_user_id: Optional[int] = None
+    summary: Optional[str] = Field(default=None, max_length=2_000)
+
+
+class AgentContextRequest(BaseModel):
+    agent_name: str = Field(default="Hermes Agent", min_length=1, max_length=120)
+    user_id: Optional[int] = None
+    team_id: Optional[int] = None
+    project_id: Optional[int] = None
+    query: Optional[str] = Field(default=None, max_length=1_000)
+    include_private: bool = False
+    top_k: int = Field(default=8, ge=1, le=25)
+
+
+class AgentContextResponse(BaseModel):
+    agent_name: str
+    policy: EnterprisePolicy
+    private_recent: List[CaptureResult]
+    shared_memories: List[SharedMemoryItem]
+    audit_event: AuditEventItem
+    note: str

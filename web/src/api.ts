@@ -172,6 +172,122 @@ export type AbstractionStatus = {
   running: boolean;
 };
 
+export type EnterprisePolicy = {
+  id: number | null;
+  organization_id: number;
+  name: string;
+  capture_sources: string[];
+  blocked_apps: string[];
+  blocked_domains: string[];
+  excluded_path_fragments: string[];
+  redaction_terms: string[];
+  retention_days: number;
+  sync_enabled: boolean;
+  updated_at: string | null;
+};
+
+export type OrganizationItem = {
+  id: number;
+  name: string;
+  slug: string;
+  created_at: string;
+};
+
+export type UserItem = {
+  id: number;
+  organization_id: number;
+  email: string;
+  name: string;
+  role: string;
+  created_at: string;
+};
+
+export type DeviceItem = {
+  id: number;
+  user_id: number;
+  device_name: string;
+  trust_state: string;
+  registered_at: string;
+  last_seen_at: string | null;
+};
+
+export type TeamItem = {
+  id: number;
+  organization_id: number;
+  name: string;
+  description: string | null;
+  member_count: number;
+  created_at: string;
+};
+
+export type ProjectItem = {
+  id: number;
+  team_id: number;
+  name: string;
+  description: string | null;
+  status: string;
+  member_count: number;
+  created_at: string;
+};
+
+export type SharedMemoryItem = {
+  id: number;
+  capture_id: number;
+  organization_id: number;
+  team_id: number | null;
+  project_id: number | null;
+  shared_by_user_id: number | null;
+  share_state: string;
+  summary: string;
+  created_at: string;
+  capture: CaptureResult | null;
+};
+
+export type AuditEventItem = {
+  id: number;
+  actor_user_id: number | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type EnterpriseStatus = {
+  personal_memory_local: boolean;
+  enterprise_policy_service: boolean;
+  identity_and_access: boolean;
+  team_memory_sync: boolean;
+  hermes_agent_connector: boolean;
+  admin_dashboard: boolean;
+  audit_logs: boolean;
+  redaction: boolean;
+  sso_provider: string;
+  encryption_scope: string;
+  device_trust: string;
+};
+
+export type TeamsOverview = {
+  organization: OrganizationItem;
+  users: UserItem[];
+  devices: DeviceItem[];
+  teams: TeamItem[];
+  projects: ProjectItem[];
+  policy: EnterprisePolicy;
+  shared_memories: SharedMemoryItem[];
+  audit_events: AuditEventItem[];
+  status: EnterpriseStatus;
+};
+
+export type AgentContextResponse = {
+  agent_name: string;
+  policy: EnterprisePolicy;
+  private_recent: CaptureResult[];
+  shared_memories: SharedMemoryItem[];
+  audit_event: AuditEventItem;
+  note: string;
+};
+
 export type ClientConfig = {
   baseUrl: string;
   apiKey: string;
@@ -326,6 +442,36 @@ export const api = {
   abstractionRuns: (config: ClientConfig, limit = 10) =>
     request<{ count: number; runs: AbstractionRun[] }>(config, `/abstraction-runs?limit=${limit}`),
   abstractionStatus: (config: ClientConfig) => request<AbstractionStatus>(config, '/abstraction-status'),
+  teamsOverview: (config: ClientConfig) => request<TeamsOverview>(config, '/teams/overview'),
+  saveTeamsPolicy: (config: ClientConfig, policy: EnterprisePolicy) =>
+    request<EnterprisePolicy>(config, '/teams/policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    }),
+  shareToTeam: (
+    config: ClientConfig,
+    body: { capture_id: number; organization_id?: number; team_id?: number; project_id?: number; shared_by_user_id?: number; summary?: string },
+  ) =>
+    request<SharedMemoryItem>(config, '/teams/share', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  agentContext: (
+    config: ClientConfig,
+    body: {
+      agent_name?: string;
+      user_id?: number;
+      team_id?: number;
+      project_id?: number;
+      query?: string;
+      include_private?: boolean;
+      top_k?: number;
+    },
+  ) =>
+    request<AgentContextResponse>(config, '/agent/context', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   exportData: (config: ClientConfig) => request<unknown>(config, '/export'),
   forget: (
     config: ClientConfig,
