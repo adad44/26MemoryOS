@@ -18,6 +18,9 @@ from .schemas import (
     CleanupRequest,
     CleanupResponse,
     CollectionsResponse,
+    AgentContextRequest,
+    AgentContextResponse,
+    EnterprisePolicy,
     ExportResponse,
     ForgetRequest,
     ForgetResponse,
@@ -40,12 +43,16 @@ from .schemas import (
     TodoListResponse,
     TodoUpdateRequest,
     RunAbstractionResponse,
+    ShareMemoryRequest,
+    SharedMemoryItem,
+    TeamsOverviewResponse,
     UserModelResponse,
     WeeklyDigestResponse,
 )
 from .security import require_api_key
 from .service import (
     insert_browser_capture,
+    agent_context,
     cleanup_storage,
     create_todo,
     delete_todo,
@@ -59,11 +66,14 @@ from .service import (
     recent,
     refresh_index,
     save_privacy_settings,
+    save_enterprise_policy,
     save_storage_policy,
     search,
+    share_capture_to_team,
     smart_collections,
     stats,
     storage_stats,
+    teams_overview,
     update_capture_pin,
     update_capture_noise_label,
     update_capture_noise_labels,
@@ -342,6 +352,47 @@ def storage_policy_endpoint() -> StoragePolicy:
 @app.put("/storage-policy", response_model=StoragePolicy, dependencies=[Depends(require_api_key)])
 def update_storage_policy_endpoint(request: StoragePolicy) -> StoragePolicy:
     return save_storage_policy(request)
+
+
+@app.get("/teams/overview", response_model=TeamsOverviewResponse, dependencies=[Depends(require_api_key)])
+def teams_overview_endpoint() -> TeamsOverviewResponse:
+    return TeamsOverviewResponse(**teams_overview())
+
+
+@app.put("/teams/policy", response_model=EnterprisePolicy, dependencies=[Depends(require_api_key)])
+def update_teams_policy_endpoint(request: EnterprisePolicy) -> EnterprisePolicy:
+    return save_enterprise_policy(request)
+
+
+@app.post("/teams/share", response_model=SharedMemoryItem, dependencies=[Depends(require_api_key)])
+def share_memory_endpoint(request: ShareMemoryRequest) -> SharedMemoryItem:
+    try:
+        shared = share_capture_to_team(
+            capture_id=request.capture_id,
+            organization_id=request.organization_id,
+            team_id=request.team_id,
+            project_id=request.project_id,
+            shared_by_user_id=request.shared_by_user_id,
+            summary=request.summary,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SharedMemoryItem(**shared)
+
+
+@app.post("/agent/context", response_model=AgentContextResponse, dependencies=[Depends(require_api_key)])
+def agent_context_endpoint(request: AgentContextRequest) -> AgentContextResponse:
+    return AgentContextResponse(
+        **agent_context(
+            agent_name=request.agent_name,
+            user_id=request.user_id,
+            team_id=request.team_id,
+            project_id=request.project_id,
+            query=request.query,
+            include_private=request.include_private,
+            top_k=request.top_k,
+        )
+    )
 
 
 @app.post("/cleanup", response_model=CleanupResponse, dependencies=[Depends(require_api_key)])

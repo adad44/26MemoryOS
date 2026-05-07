@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   BrainCircuit,
+  Building2,
   CalendarDays,
   Check,
   Clock3,
@@ -23,9 +24,11 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  Share2,
   Tag,
   Trash2,
   UserRound,
+  UsersRound,
   X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -40,12 +43,13 @@ import {
   StatsResponse,
   StoragePolicy,
   StorageStats,
+  TeamsOverview,
   TodoItem,
   WeeklyDigest,
 } from './api';
 import UserModel from './UserModel';
 
-type Tab = 'home' | 'search' | 'recent' | 'you' | 'collections' | 'digest' | 'todo' | 'label' | 'stats' | 'settings';
+type Tab = 'home' | 'search' | 'recent' | 'you' | 'teams' | 'collections' | 'digest' | 'todo' | 'label' | 'stats' | 'settings';
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8765';
 
@@ -54,6 +58,7 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Search }> = [
   { id: 'search', label: 'Search', icon: Search },
   { id: 'recent', label: 'Recent', icon: FileText },
   { id: 'you', label: 'You', icon: UserRound },
+  { id: 'teams', label: 'Teams', icon: UsersRound },
   { id: 'collections', label: 'Collections', icon: Layers3 },
   { id: 'digest', label: 'Digest', icon: CalendarDays },
   { id: 'todo', label: 'Todo', icon: ClipboardList },
@@ -285,6 +290,7 @@ export function App() {
           {tab === 'search' && <SearchView config={config} onError={setError} />}
           {tab === 'recent' && <RecentView config={config} onError={setError} />}
           {tab === 'you' && <UserModel config={config} onError={setError} onToast={setToast} />}
+          {tab === 'teams' && <TeamsView config={config} onError={setError} onToast={setToast} />}
           {tab === 'collections' && <CollectionsView config={config} onError={setError} />}
           {tab === 'digest' && <DigestView config={config} onError={setError} />}
           {tab === 'todo' && <TodoView config={config} onError={setError} onToast={setToast} />}
@@ -380,6 +386,10 @@ function HomeView({
             <button className="home-link" onClick={() => onNavigate('you')} type="button">
               <UserRound size={17} />
               User model
+            </button>
+            <button className="home-link" onClick={() => onNavigate('teams')} type="button">
+              <UsersRound size={17} />
+              Teams
             </button>
             <button className="home-link" onClick={() => onNavigate('digest')} type="button">
               <CalendarDays size={17} />
@@ -557,6 +567,324 @@ function RecentView({ config, onError }: { config: ClientConfig; onError: (value
         </button>
       </div>
       <ResultList config={config} query="" results={results} onError={onError} />
+    </div>
+  );
+}
+
+function TeamsView({
+  config,
+  onError,
+  onToast,
+}: {
+  config: ClientConfig;
+  onError: (value: string) => void;
+  onToast: (value: string) => void;
+}) {
+  const [overview, setOverview] = useState<TeamsOverview | null>(null);
+  const [recentCaptures, setRecentCaptures] = useState<CaptureResult[]>([]);
+  const [policyDraft, setPolicyDraft] = useState<TeamsOverview['policy'] | null>(null);
+  const [selectedCaptureId, setSelectedCaptureId] = useState('');
+  const [shareSummary, setShareSummary] = useState('');
+  const [agentQuery, setAgentQuery] = useState('');
+  const [includePrivate, setIncludePrivate] = useState(false);
+  const [agentResponse, setAgentResponse] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [teams, recent] = await Promise.all([api.teamsOverview(config), api.recent(config, 25)]);
+      setOverview(teams);
+      setPolicyDraft(teams.policy);
+      setRecentCaptures(recent.results);
+      if (!selectedCaptureId && recent.results.length) setSelectedCaptureId(String(recent.results[0].id));
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [config.baseUrl, config.apiKey]);
+
+  const updatePolicyList = (key: 'capture_sources' | 'blocked_apps' | 'blocked_domains' | 'excluded_path_fragments' | 'redaction_terms', value: string) => {
+    if (!policyDraft) return;
+    setPolicyDraft({
+      ...policyDraft,
+      [key]: value
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+  };
+
+  const savePolicy = async () => {
+    if (!policyDraft) return;
+    try {
+      const saved = await api.saveTeamsPolicy(config, policyDraft);
+      setPolicyDraft(saved);
+      await load();
+      onToast('Teams policy saved');
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const shareCapture = async () => {
+    const captureId = Number(selectedCaptureId);
+    if (!captureId || !overview) return;
+    try {
+      await api.shareToTeam(config, {
+        capture_id: captureId,
+        organization_id: overview.organization.id,
+        team_id: overview.teams[0]?.id,
+        project_id: overview.projects[0]?.id,
+        shared_by_user_id: overview.users[0]?.id,
+        summary: shareSummary.trim() || undefined,
+      });
+      setShareSummary('');
+      await load();
+      onToast('Capture promoted to team memory');
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const runAgentContext = async () => {
+    if (!overview) return;
+    try {
+      const response = await api.agentContext(config, {
+        agent_name: 'Hermes Agent',
+        user_id: overview.users[0]?.id,
+        team_id: overview.teams[0]?.id,
+        project_id: overview.projects[0]?.id,
+        query: agentQuery.trim() || undefined,
+        include_private: includePrivate,
+        top_k: 8,
+      });
+      setAgentResponse(
+        `${response.shared_memories.length} shared memories, ${response.private_recent.length} private recent captures. Audit #${response.audit_event.id}`,
+      );
+      await load();
+      onError('');
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const statusRows = overview
+    ? [
+        ['Personal MemoryOS stays local', overview.status.personal_memory_local ? 'Working' : 'Missing'],
+        ['Enterprise policy service', overview.status.enterprise_policy_service ? 'Working' : 'Missing'],
+        ['Identity and access', overview.status.identity_and_access ? 'Local MVP' : 'Missing'],
+        ['Team memory sync', overview.status.team_memory_sync ? 'Working' : 'Missing'],
+        ['Hermes Agent connector', overview.status.hermes_agent_connector ? 'Working' : 'Missing'],
+        ['Admin dashboard', overview.status.admin_dashboard ? 'Working' : 'Missing'],
+        ['Audit logs and redaction', overview.status.audit_logs && overview.status.redaction ? 'Working' : 'Missing'],
+      ]
+    : [];
+
+  return (
+    <div className="space-y-4">
+      <section className="surface">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="surface-title">MemoryOS Teams</div>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Employees own private work memory. Companies own shared project memory. Policies decide what crosses the boundary.
+            </p>
+          </div>
+          <button className="command-button" onClick={load} type="button">
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Refresh
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <Metric label="Users" value={overview?.users.length ?? 0} icon={UsersRound} />
+          <Metric label="Teams" value={overview?.teams.length ?? 0} icon={Building2} />
+          <Metric label="Projects" value={overview?.projects.length ?? 0} icon={Layers3} />
+          <Metric label="Shared" value={overview?.shared_memories.length ?? 0} icon={Share2} />
+        </div>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="surface">
+          <div className="surface-title">Sequence Status</div>
+          <div className="mt-3 divide-y divide-line">
+            {statusRows.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="text-slate-700">{label}</span>
+                <span className="status-pill">{value}</span>
+              </div>
+            ))}
+            {!overview && <div className="py-2 text-sm text-slate-500">Load Teams overview to see status.</div>}
+          </div>
+          {overview && (
+            <div className="mt-4 space-y-2 text-sm text-slate-600">
+              <div>SSO: {overview.status.sso_provider}</div>
+              <div>Encryption: {overview.status.encryption_scope}</div>
+              <div>Device trust: {overview.status.device_trust}</div>
+            </div>
+          )}
+        </section>
+
+        <section className="surface">
+          <div className="surface-title">Identity, Teams, and Devices</div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="border border-line bg-panel p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Organization</div>
+              <div className="mt-1 font-medium">{overview?.organization.name || 'Not loaded'}</div>
+            </div>
+            <div className="border border-line bg-panel p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Default Team</div>
+              <div className="mt-1 font-medium">{overview?.teams[0]?.name || 'None'}</div>
+            </div>
+            <div className="border border-line bg-panel p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Trusted Device</div>
+              <div className="mt-1 font-medium">{overview?.devices[0]?.device_name || 'None'}</div>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {(overview?.users || []).map((user) => (
+              <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 border border-line bg-white p-3 text-sm">
+                <span>{user.name}</span>
+                <span className="status-pill">{user.role}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="surface">
+        <div className="surface-title">Enterprise Policy Service</div>
+        {policyDraft ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <label className="field-label">
+              Policy Name
+              <input className="settings-input" value={policyDraft.name} onChange={(event) => setPolicyDraft({ ...policyDraft, name: event.target.value })} />
+            </label>
+            <label className="field-label">
+              Retention Days
+              <input
+                className="settings-input"
+                value={policyDraft.retention_days}
+                onChange={(event) => setPolicyDraft({ ...policyDraft, retention_days: Number(event.target.value) || 90 })}
+                type="number"
+              />
+            </label>
+            <label className="selection-control mt-6">
+              <input
+                checked={policyDraft.sync_enabled}
+                onChange={(event) => setPolicyDraft({ ...policyDraft, sync_enabled: event.target.checked })}
+                type="checkbox"
+              />
+              <span>Team memory sync</span>
+            </label>
+            <label className="field-label">
+              Capture Sources
+              <textarea className="settings-area" value={policyDraft.capture_sources.join('\n')} onChange={(event) => updatePolicyList('capture_sources', event.target.value)} />
+            </label>
+            <label className="field-label">
+              Blocked Apps
+              <textarea className="settings-area" value={policyDraft.blocked_apps.join('\n')} onChange={(event) => updatePolicyList('blocked_apps', event.target.value)} />
+            </label>
+            <label className="field-label">
+              Redaction Terms
+              <textarea className="settings-area" value={policyDraft.redaction_terms.join('\n')} onChange={(event) => updatePolicyList('redaction_terms', event.target.value)} />
+            </label>
+          </div>
+        ) : (
+          <div className="mt-3 text-sm text-slate-500">Policy not loaded.</div>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className="command-button primary" onClick={savePolicy} type="button">
+            <Check size={16} />
+            Save Policy
+          </button>
+        </div>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="surface">
+          <div className="surface-title">Promote Local Memory to Team Memory</div>
+          <div className="mt-4 grid gap-3">
+            <select className="settings-input" value={selectedCaptureId} onChange={(event) => setSelectedCaptureId(event.target.value)}>
+              {recentCaptures.map((capture) => (
+                <option key={capture.id} value={capture.id}>
+                  #{capture.id} {capture.window_title || capture.url || capture.app_name}
+                </option>
+              ))}
+            </select>
+            <textarea
+              className="settings-area"
+              value={shareSummary}
+              onChange={(event) => setShareSummary(event.target.value)}
+              placeholder="Optional shared summary. Leave blank to use the capture snippet."
+            />
+            <button className="command-button primary w-fit" disabled={!selectedCaptureId} onClick={shareCapture} type="button">
+              <Share2 size={16} />
+              Share to Team Memory
+            </button>
+          </div>
+        </section>
+
+        <section className="surface">
+          <div className="surface-title">Hermes Agent Connector</div>
+          <div className="mt-4 grid gap-3">
+            <input className="settings-input" value={agentQuery} onChange={(event) => setAgentQuery(event.target.value)} placeholder="Ask for project context..." />
+            <label className="selection-control w-fit">
+              <input checked={includePrivate} onChange={(event) => setIncludePrivate(event.target.checked)} type="checkbox" />
+              <span>Include private recent memory</span>
+            </label>
+            <button className="command-button primary w-fit" onClick={runAgentContext} type="button">
+              <BrainCircuit size={16} />
+              Build Agent Context
+            </button>
+            {agentResponse && <div className="border border-line bg-panel p-3 text-sm text-slate-700">{agentResponse}</div>}
+          </div>
+        </section>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="surface">
+          <div className="surface-title">Shared Project Memory</div>
+          <div className="mt-3 space-y-3">
+            {(overview?.shared_memories || []).map((memory) => (
+              <div key={memory.id} className="border border-line bg-white p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">Share #{memory.id}</span>
+                  <span className="status-pill">Capture #{memory.capture_id}</span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{memory.summary}</p>
+              </div>
+            ))}
+            {overview && !overview.shared_memories.length && <div className="text-sm text-slate-500">No shared memories yet.</div>}
+          </div>
+        </section>
+
+        <section className="surface">
+          <div className="surface-title">Audit Log</div>
+          <div className="mt-3 divide-y divide-line">
+            {(overview?.audit_events || []).map((event) => (
+              <div key={event.id} className="py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-ink">{event.action}</span>
+                  <span className="text-xs text-slate-500">{formatTime(event.created_at)}</span>
+                </div>
+                <div className="mt-1 text-slate-600">
+                  {event.resource_type} {event.resource_id ? `#${event.resource_id}` : ''}
+                </div>
+              </div>
+            ))}
+            {overview && !overview.audit_events.length && <div className="py-2 text-sm text-slate-500">No audit events yet.</div>}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

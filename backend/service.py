@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .config import PROJECT_ROOT
 
@@ -33,6 +33,7 @@ from memoryos.reranker import rerank_hits
 from .schemas import CaptureResult
 from .schemas import CollectionSummary
 from .schemas import CleanupResponse
+from .schemas import EnterprisePolicy
 from .schemas import PrivacySettings
 from .schemas import StoragePolicy
 from .schemas import TodoItem
@@ -916,3 +917,471 @@ def forget_captures(
         cursor = conn.execute(sql, params)
         conn.commit()
         return int(cursor.rowcount)
+
+
+def _json_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if str(item).strip()]
+
+
+def _json_text(items: list[str]) -> str:
+    return json.dumps([item.strip() for item in items if item.strip()])
+
+
+def _row_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return dict(row)
+
+
+def _policy_from_row(row: sqlite3.Row) -> EnterprisePolicy:
+    return EnterprisePolicy(
+        id=int(row["id"]),
+        organization_id=int(row["organization_id"]),
+        name=str(row["name"]),
+        capture_sources=_json_list(row["capture_sources"]),
+        blocked_apps=_json_list(row["blocked_apps"]),
+        blocked_domains=_json_list(row["blocked_domains"]),
+        excluded_path_fragments=_json_list(row["excluded_path_fragments"]),
+        redaction_terms=_json_list(row["redaction_terms"]),
+        retention_days=int(row["retention_days"]),
+        sync_enabled=bool(row["sync_enabled"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def _default_enterprise_policy(organization_id: int) -> EnterprisePolicy:
+    privacy = get_privacy_settings()
+    return EnterprisePolicy(
+        organization_id=organization_id,
+        name="Default private-first Teams policy",
+        capture_sources=["meetings", "docs", "tickets", "browser", "github", "local_files"],
+        blocked_apps=privacy.blocked_apps,
+        blocked_domains=privacy.blocked_domains,
+        excluded_path_fragments=privacy.excluded_path_fragments,
+        redaction_terms=["api key", "password", "secret", "token"],
+        retention_days=90,
+        sync_enabled=True,
+    )
+
+
+def _log_audit(
+    conn: sqlite3.Connection,
+    action: str,
+    resource_type: str,
+    resource_id: Optional[object] = None,
+    actor_user_id: Optional[int] = None,
+    details: Optional[dict[str, Any]] = None,
+) -> sqlite3.Row:
+    cursor = conn.execute(
+        """
+        INSERT INTO audit_events (actor_user_id, action, resource_type, resource_id, details)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (actor_user_id, action, resource_type, str(resource_id) if resource_id is not None else None, json.dumps(details or {})),
+    )
+    return conn.execute("SELECT * FROM audit_events WHERE id = ?", (cursor.lastrowid,)).fetchone()
+
+
+def _audit_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    data = _row_dict(row)
+    try:
+        data["details"] = json.loads(data.get("details") or "{}")
+    except Exception:
+        data["details"] = {}
+    return data
+
+
+def _ensure_teams_seed(conn: sqlite3.Connection) -> int:
+    org = conn.execute("SELECT id FROM organizations WHERE slug = ?", ("memoryos-demo",)).fetchone()
+    if org:
+        return int(org["id"])
+
+    cursor = conn.execute(
+        "INSERT INTO organizations (name, slug) VALUES (?, ?)",
+        ("MemoryOS Demo Enterprise", "memoryos-demo"),
+    )
+    organization_id = int(cursor.lastrowid)
+    user_cursor = conn.execute(
+        """
+        INSERT INTO users (organization_id, email, name, role)
+        VALUES (?, ?, ?, ?)
+        """,
+        (organization_id, "admin@memoryos.local", "MemoryOS Admin", "org_admin"),
+    )
+    user_id = int(user_cursor.lastrowid)
+    conn.execute(
+        """
+        INSERT INTO devices (user_id, device_name, trust_state, last_seen_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (user_id, "Local work computer", "trusted", datetime.now(timezone.utc).isoformat()),
+    )
+    team_cursor = conn.execute(
+        """
+        INSERT INTO teams (organization_id, name, description)
+        VALUES (?, ?, ?)
+        """,
+        (organization_id, "Product Team", "Default team workspace for shared MemoryOS project context."),
+    )
+    team_id = int(team_cursor.lastrowid)
+    conn.execute("INSERT INTO team_memberships (team_id, user_id, role) VALUES (?, ?, ?)", (team_id, user_id, "owner"))
+    project_cursor = conn.execute(
+        """
+        INSERT INTO projects (team_id, name, description)
+        VALUES (?, ?, ?)
+        """,
+        (team_id, "MemoryOS Teams", "Enterprise memory and agent-context rollout."),
+    )
+    project_id = int(project_cursor.lastrowid)
+    conn.execute(
+        "INSERT INTO project_memberships (project_id, user_id, role) VALUES (?, ?, ?)",
+        (project_id, user_id, "owner"),
+    )
+    policy = _default_enterprise_policy(organization_id)
+    conn.execute(
+        """
+        INSERT INTO enterprise_policies
+        (organization_id, name, capture_sources, blocked_apps, blocked_domains, excluded_path_fragments, redaction_terms, retention_days, sync_enabled, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            organization_id,
+            policy.name,
+            _json_text(policy.capture_sources),
+            _json_text(policy.blocked_apps),
+            _json_text(policy.blocked_domains),
+            _json_text(policy.excluded_path_fragments),
+            _json_text(policy.redaction_terms),
+            policy.retention_days,
+            1 if policy.sync_enabled else 0,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+    conn.execute(
+        """
+        INSERT INTO agent_access_grants
+        (agent_name, user_id, team_id, project_id, scope, can_read_private, can_read_shared)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("Hermes Agent", user_id, team_id, project_id, "project", 0, 1),
+    )
+    _log_audit(
+        conn,
+        action="teams_bootstrap",
+        resource_type="organization",
+        resource_id=organization_id,
+        actor_user_id=user_id,
+        details={"policy": "Employees own private work memory. Companies own shared project memory."},
+    )
+    conn.commit()
+    return organization_id
+
+
+def _active_policy(conn: sqlite3.Connection, organization_id: int) -> EnterprisePolicy:
+    row = conn.execute("SELECT * FROM enterprise_policies WHERE organization_id = ?", (organization_id,)).fetchone()
+    if row:
+        return _policy_from_row(row)
+    policy = _default_enterprise_policy(organization_id)
+    save_enterprise_policy(policy)
+    row = conn.execute("SELECT * FROM enterprise_policies WHERE organization_id = ?", (organization_id,)).fetchone()
+    return _policy_from_row(row)
+
+
+def save_enterprise_policy(policy: EnterprisePolicy) -> EnterprisePolicy:
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as conn:
+        _ensure_teams_seed(conn)
+        existing = conn.execute(
+            "SELECT id FROM enterprise_policies WHERE organization_id = ?",
+            (policy.organization_id,),
+        ).fetchone()
+        params = (
+            policy.name,
+            _json_text(policy.capture_sources),
+            _json_text(policy.blocked_apps),
+            _json_text(policy.blocked_domains),
+            _json_text(policy.excluded_path_fragments),
+            _json_text(policy.redaction_terms),
+            int(policy.retention_days),
+            1 if policy.sync_enabled else 0,
+            now,
+            policy.organization_id,
+        )
+        if existing:
+            conn.execute(
+                """
+                UPDATE enterprise_policies
+                SET name = ?, capture_sources = ?, blocked_apps = ?, blocked_domains = ?,
+                    excluded_path_fragments = ?, redaction_terms = ?, retention_days = ?,
+                    sync_enabled = ?, updated_at = ?
+                WHERE organization_id = ?
+                """,
+                params,
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO enterprise_policies
+                (name, capture_sources, blocked_apps, blocked_domains, excluded_path_fragments, redaction_terms, retention_days, sync_enabled, updated_at, organization_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                params,
+            )
+        _log_audit(
+            conn,
+            action="enterprise_policy_updated",
+            resource_type="enterprise_policy",
+            resource_id=policy.organization_id,
+            details={"retention_days": policy.retention_days, "sync_enabled": policy.sync_enabled},
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM enterprise_policies WHERE organization_id = ?", (policy.organization_id,)).fetchone()
+    return _policy_from_row(row)
+
+
+def _redact_text(text: str, policy: EnterprisePolicy) -> str:
+    redacted = text
+    for term in policy.redaction_terms:
+        if not term:
+            continue
+        redacted = redacted.replace(term, "[redacted]")
+        redacted = redacted.replace(term.title(), "[redacted]")
+        redacted = redacted.replace(term.upper(), "[redacted]")
+    return redacted
+
+
+def _shared_memory_from_row(conn: sqlite3.Connection, row: sqlite3.Row, policy: EnterprisePolicy) -> dict[str, Any]:
+    capture = conn.execute(f"SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?", (row["capture_id"],)).fetchone()
+    data = _row_dict(row)
+    data["summary"] = _redact_text(str(data["summary"]), policy)
+    data["capture"] = row_to_capture_result(capture).dict() if capture else None
+    if data["capture"]:
+        data["capture"]["content"] = _redact_text(str(data["capture"]["content"]), policy)
+        data["capture"]["snippet"] = _redact_text(str(data["capture"]["snippet"]), policy)
+    return data
+
+
+def share_capture_to_team(
+    capture_id: int,
+    organization_id: int = 1,
+    team_id: Optional[int] = None,
+    project_id: Optional[int] = None,
+    shared_by_user_id: Optional[int] = None,
+    summary: Optional[str] = None,
+) -> dict[str, Any]:
+    with connect() as conn:
+        organization_id = _ensure_teams_seed(conn) if organization_id == 1 else organization_id
+        policy = _active_policy(conn, organization_id)
+        if not policy.sync_enabled:
+            raise ValueError("Team memory sync is disabled by enterprise policy.")
+        capture = conn.execute(f"SELECT {CAPTURE_COLUMNS} FROM captures WHERE id = ?", (capture_id,)).fetchone()
+        if capture is None:
+            raise ValueError("Capture not found.")
+        if int(capture["is_noise"] or 0) == 1:
+            raise ValueError("Noise captures cannot be shared to team memory.")
+        if team_id is None:
+            team = conn.execute("SELECT id FROM teams WHERE organization_id = ? ORDER BY id LIMIT 1", (organization_id,)).fetchone()
+            team_id = int(team["id"]) if team else None
+        if project_id is None and team_id is not None:
+            project = conn.execute("SELECT id FROM projects WHERE team_id = ? ORDER BY id LIMIT 1", (team_id,)).fetchone()
+            project_id = int(project["id"]) if project else None
+        if shared_by_user_id is None:
+            user = conn.execute("SELECT id FROM users WHERE organization_id = ? ORDER BY id LIMIT 1", (organization_id,)).fetchone()
+            shared_by_user_id = int(user["id"]) if user else None
+
+        share_summary = summary or result_snippet(str(capture["content"] or ""))
+        share_summary = _redact_text(share_summary[:2_000], policy)
+        cursor = conn.execute(
+            """
+            INSERT INTO memory_shares
+            (capture_id, organization_id, team_id, project_id, shared_by_user_id, share_state, summary)
+            VALUES (?, ?, ?, ?, ?, 'shared', ?)
+            """,
+            (capture_id, organization_id, team_id, project_id, shared_by_user_id, share_summary),
+        )
+        share_id = int(cursor.lastrowid)
+        _log_audit(
+            conn,
+            action="memory_shared",
+            resource_type="memory_share",
+            resource_id=share_id,
+            actor_user_id=shared_by_user_id,
+            details={"capture_id": capture_id, "team_id": team_id, "project_id": project_id},
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM memory_shares WHERE id = ?", (share_id,)).fetchone()
+    with connect() as read_conn:
+        return _shared_memory_from_row(read_conn, row, policy)
+
+
+def teams_overview() -> dict[str, Any]:
+    with connect() as conn:
+        organization_id = _ensure_teams_seed(conn)
+        policy = _active_policy(conn, organization_id)
+        organization = _row_dict(conn.execute("SELECT * FROM organizations WHERE id = ?", (organization_id,)).fetchone())
+        users = [_row_dict(row) for row in conn.execute("SELECT * FROM users WHERE organization_id = ? ORDER BY id", (organization_id,))]
+        devices = [
+            _row_dict(row)
+            for row in conn.execute(
+                """
+                SELECT devices.*
+                FROM devices
+                JOIN users ON users.id = devices.user_id
+                WHERE users.organization_id = ?
+                ORDER BY devices.id
+                """,
+                (organization_id,),
+            )
+        ]
+        teams = [
+            {
+                **_row_dict(row),
+                "member_count": int(row["member_count"] or 0),
+            }
+            for row in conn.execute(
+                """
+                SELECT teams.*, COUNT(team_memberships.id) AS member_count
+                FROM teams
+                LEFT JOIN team_memberships ON team_memberships.team_id = teams.id
+                WHERE teams.organization_id = ?
+                GROUP BY teams.id
+                ORDER BY teams.id
+                """,
+                (organization_id,),
+            )
+        ]
+        projects = [
+            {
+                **_row_dict(row),
+                "member_count": int(row["member_count"] or 0),
+            }
+            for row in conn.execute(
+                """
+                SELECT projects.*, COUNT(project_memberships.id) AS member_count
+                FROM projects
+                LEFT JOIN project_memberships ON project_memberships.project_id = projects.id
+                JOIN teams ON teams.id = projects.team_id
+                WHERE teams.organization_id = ?
+                GROUP BY projects.id
+                ORDER BY projects.id
+                """,
+                (organization_id,),
+            )
+        ]
+        share_rows = conn.execute(
+            """
+            SELECT * FROM memory_shares
+            WHERE organization_id = ? AND share_state = 'shared'
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (organization_id,),
+        ).fetchall()
+        shared_memories = [_shared_memory_from_row(conn, row, policy) for row in share_rows]
+        audit_events = [
+            _audit_from_row(row)
+            for row in conn.execute(
+                "SELECT * FROM audit_events ORDER BY created_at DESC LIMIT 25",
+            )
+        ]
+    return {
+        "organization": organization,
+        "users": users,
+        "devices": devices,
+        "teams": teams,
+        "projects": projects,
+        "policy": policy,
+        "shared_memories": shared_memories,
+        "audit_events": audit_events,
+        "status": {
+            "personal_memory_local": True,
+            "enterprise_policy_service": True,
+            "identity_and_access": True,
+            "team_memory_sync": True,
+            "hermes_agent_connector": True,
+            "admin_dashboard": True,
+            "audit_logs": True,
+            "redaction": True,
+            "sso_provider": "local demo identity; external SSO not connected",
+            "encryption_scope": "local SQLite/filesystem plus optional API key; managed enterprise KMS not connected",
+            "device_trust": "device registration table with trusted/pending/revoked states",
+        },
+    }
+
+
+def agent_context(
+    agent_name: str,
+    user_id: Optional[int],
+    team_id: Optional[int],
+    project_id: Optional[int],
+    query: Optional[str],
+    include_private: bool,
+    top_k: int,
+) -> dict[str, Any]:
+    with connect() as conn:
+        organization_id = _ensure_teams_seed(conn)
+        policy = _active_policy(conn, organization_id)
+        shared_where = ["memory_shares.organization_id = ?", "memory_shares.share_state = 'shared'"]
+        params: list[object] = [organization_id]
+        if team_id is not None:
+            shared_where.append("memory_shares.team_id = ?")
+            params.append(team_id)
+        if project_id is not None:
+            shared_where.append("memory_shares.project_id = ?")
+            params.append(project_id)
+        if query:
+            shared_where.append("(LOWER(memory_shares.summary) LIKE ? OR LOWER(captures.content) LIKE ?)")
+            needle = f"%{query.lower()}%"
+            params.extend([needle, needle])
+        share_rows = conn.execute(
+            f"""
+            SELECT memory_shares.*
+            FROM memory_shares
+            JOIN captures ON captures.id = memory_shares.capture_id
+            WHERE {' AND '.join(shared_where)}
+            ORDER BY memory_shares.created_at DESC
+            LIMIT ?
+            """,
+            [*params, top_k],
+        ).fetchall()
+        shared_memories = [_shared_memory_from_row(conn, row, policy) for row in share_rows]
+
+        private_recent: list[CaptureResult] = []
+        if include_private:
+            rows = fetch_captures(conn, limit=top_k, non_noise=True)
+            private_recent = [row_to_capture_result(row) for row in rows]
+            for capture in private_recent:
+                capture.content = _redact_text(capture.content, policy)
+                capture.snippet = _redact_text(capture.snippet, policy)
+
+        audit = _log_audit(
+            conn,
+            action="agent_context_read",
+            resource_type="agent_context",
+            resource_id=agent_name,
+            actor_user_id=user_id,
+            details={
+                "team_id": team_id,
+                "project_id": project_id,
+                "include_private": include_private,
+                "query": query,
+                "shared_count": len(shared_memories),
+            },
+        )
+        conn.commit()
+    return {
+        "agent_name": agent_name,
+        "policy": policy,
+        "private_recent": private_recent,
+        "shared_memories": shared_memories,
+        "audit_event": _audit_from_row(audit),
+        "note": "Hermes Agent context is policy-bound. Shared memory is available by default; private recent memory is only returned when include_private is true.",
+    }

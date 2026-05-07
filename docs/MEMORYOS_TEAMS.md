@@ -187,6 +187,28 @@ Recommended MVP:
 - Add audit rows for shared, opened, exported, and deleted memory.
 - Add a product-level onboarding flow that explains what stays private and what can be shared.
 
+## Local MVP Implementation
+
+The current repository includes a local-first Teams MVP that proves the sequence without requiring a hosted enterprise service.
+
+Implemented locally:
+
+- SQLite tables for organizations, users, devices, teams, projects, memberships, enterprise policies, shared memories, agent access grants, and audit events.
+- `GET /teams/overview` to bootstrap and inspect the local enterprise workspace.
+- `PUT /teams/policy` for admin-managed capture sources, exclusions, retention, redaction terms, and team-sync enablement.
+- `POST /teams/share` to promote a selected local capture into shared team/project memory.
+- `POST /agent/context` so Hermes Agent can request policy-bound shared context and optional private recent context.
+- A Teams tab in the local web UI for admin policy, identity/device status, team memory sharing, Hermes Agent context, shared project memory, and audit logs.
+
+Still planned for a production enterprise rollout:
+
+- Hosted organization service or customer-controlled deployment.
+- Real SSO/SAML/OIDC integration.
+- Managed encryption keys and enterprise KMS support.
+- Device attestation beyond local trusted/pending/revoked state.
+- Access reviews, SCIM provisioning, and compliance exports.
+- Cross-device sync and conflict handling.
+
 ## Data Model Direction
 
 The enterprise layer should extend the local model rather than replace it.
